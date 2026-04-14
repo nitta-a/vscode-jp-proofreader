@@ -15,9 +15,10 @@ vscode-jp-proofreader/
 │       └── release.yml           # Publish to VS Code Marketplace on tag push
 ├── images/                       # Extension icon and screenshot assets
 ├── src/
-│   ├── constants.ts              # DEFAULT_SYSTEM_PROMPT, JSON_CONVERSION_PROMPT, SYSTEM_PROMPT_KEY
-│   ├── extension.ts              # Activation entry point: registers WebviewViewProvider, command, and Copilot chat participant
-│   ├── proofreaderPanel.ts       # Singleton WebviewPanel (createOrShow pattern): LM API calls, URL fetch, HTML generation
+│   ├── codeActionProvider.ts     # QuickFix CodeActionProvider: replaces flagged text with replacementText from diagnostics
+│   ├── constants.ts              # DEFAULT_SYSTEM_PROMPT, JSON_CONVERSION_PROMPT, SYSTEM_PROMPT_KEY, SYSTEM_PROMPT_FILE_KEY, DEFAULT_PROMPT_FILE_NAME, DIAGNOSTIC_SOURCE
+│   ├── extension.ts              # Activation entry point: registers DiagnosticCollection, CodeActionProvider, WebviewViewProvider, command, and Copilot chat participant
+│   ├── proofreaderPanel.ts       # Singleton WebviewPanel (createOrShow pattern): LM API calls, URL fetch, diagnostics, HTML generation
 │   └── viewProvider.ts           # Activity bar sidebar WebviewView: renders a button that opens the main panel
 ├── webview/                      # WebView frontend (compiled to dist/webview/ by tsconfig.webview.json)
 │   ├── components/
@@ -55,8 +56,13 @@ Output goes to `dist/extension.js` (CJS, `vscode` external) and `dist/webview/` 
 - **Two-phase review:** Phase 1 streams the LLM review text chunk-by-chunk to the webview. Phase 2 sends a standalone conversion request (`JSON_CONVERSION_PROMPT`) to transform the review into a structured JSON array of `ReviewItem` objects.
 - **HTML generation:** `src/proofreaderPanel.ts#_buildHtml()` generates the HTML shell that loads the webview bundle and injects the Shoelace asset base path via a `<meta name="sl-base">` tag.
 - **Shared message types:** always use the typed unions in `webview/vscode-api.ts` (`HostMsg`, `WebviewToHostMsg`) for WebView ↔ Host communication; never use ad-hoc string `type` fields.
-- **System prompt storage:** the user-customisable system prompt is persisted with `context.globalState` under the key `SYSTEM_PROMPT_KEY`; defaults to `DEFAULT_SYSTEM_PROMPT` when not set.
+- **System prompt storage:** the user-customisable system prompt is persisted with `context.globalState` under the key `SYSTEM_PROMPT_KEY`; defaults to `DEFAULT_SYSTEM_PROMPT` when not set. The path of the last loaded/saved file is stored under `SYSTEM_PROMPT_FILE_KEY`.
+- **Prompt file save/load:** users can save the system prompt to `jp-proofreader-prompt.txt` (constant `DEFAULT_PROMPT_FILE_NAME`) in the workspace root via `savePromptToFile`, or load any `.txt`/`.md` file via `loadPromptFromFile`. On first launch, the extension auto-loads the default file if it exists.
 - **URL fetch:** `src/proofreaderPanel.ts#_fetchUrl()` fetches a URL via Node's `http`/`https` and strips HTML to plain text before sending it to the webview. Redirects are followed up to 5 times.
+- **Diagnostics & quick-fix:** after Phase 2 completes, `_setDiagnostics()` searches the active editor for each `targetText` and attaches a `vscode.Diagnostic` (Error/Warning/Information by level). `ProofreaderCodeActionProvider` offers a QuickFix action whenever `diagnostic.code` (set to `replacementText`) is a non-empty string. All diagnostics use `DIAGNOSTIC_SOURCE` as the source identifier.
+- **Custom rules:** at review time, `_runReview()` looks for `.proofreaderrc.txt` or `proofreader-dict.txt` in the workspace root and appends their content to the system prompt as project-specific rules.
+- **Model filtering:** `_isSuitableForProofreading()` reads `vscode-jp-proofreader.allowedModelPatterns` and `vscode-jp-proofreader.excludedModelPatterns` from VS Code settings to decide which Copilot models are offered. Excluded patterns take precedence.
+- **Language context:** the active editor's `languageId` is included in the Phase 1 prompt so the LLM can avoid treating format-specific syntax (e.g. Markdown symbols) as typos.
 
 ## Adding New Commands
 
