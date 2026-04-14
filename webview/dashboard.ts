@@ -19,7 +19,7 @@ import { customElement, state } from "lit/decorators.js";
 import "./components/review-pane";
 import "./components/settings-pane";
 import type { FetchUrlDetail, ReviewRequestDetail } from "./components/review-pane";
-import type { SaveSettingsDetail } from "./components/settings-pane";
+import type { SavePromptToFileDetail, SaveSettingsDetail } from "./components/settings-pane";
 // Shared API singleton and types
 import { type HostMsg, type ModelInfo, type ReviewItem, vscode } from "./vscode-api";
 
@@ -37,6 +37,9 @@ class JpProofreaderApp extends LitElement {
   @state() private _defaultSystemPrompt = "";
   @state() private _urlText = "";
   @state() private _urlLoading = false;
+  @state() private _promptFilePath = "";
+  @state() private _fileOpError = "";
+  @state() private _loadVersion = 0;
 
   static override styles = css`
     :host {
@@ -116,6 +119,7 @@ class JpProofreaderApp extends LitElement {
     } else if (msg.type === "settings") {
       this._systemPrompt = msg.systemPrompt;
       this._defaultSystemPrompt = msg.defaultSystemPrompt;
+      this._promptFilePath = msg.promptFilePath ?? "";
     } else if (msg.type === "urlContent") {
       console.log(`[JP Proofreader] urlContent length=${msg.text.length}`);
       this._urlLoading = false;
@@ -124,6 +128,19 @@ class JpProofreaderApp extends LitElement {
       console.error(`[JP Proofreader] urlError: ${msg.message}`);
       this._urlLoading = false;
       this._hostError = msg.message;
+    } else if (msg.type === "promptFileSaved") {
+      console.log(`[JP Proofreader] promptFileSaved: ${msg.path}`);
+      this._promptFilePath = msg.path;
+      this._fileOpError = "";
+    } else if (msg.type === "promptFileLoaded") {
+      console.log(`[JP Proofreader] promptFileLoaded: ${msg.path}`);
+      this._systemPrompt = msg.systemPrompt;
+      this._promptFilePath = msg.path;
+      this._fileOpError = "";
+      this._loadVersion += 1;
+    } else if (msg.type === "promptFileError") {
+      console.error(`[JP Proofreader] promptFileError: ${msg.message}`);
+      this._fileOpError = msg.message;
     }
   };
 
@@ -177,6 +194,14 @@ class JpProofreaderApp extends LitElement {
     vscode.postMessage({ type: "setSettings", systemPrompt: e.detail.systemPrompt });
   };
 
+  private _handleSavePromptToFile = (e: CustomEvent<SavePromptToFileDetail>): void => {
+    vscode.postMessage({ type: "savePromptToFile", systemPrompt: e.detail.systemPrompt });
+  };
+
+  private _handleLoadPromptFromFile = (): void => {
+    vscode.postMessage({ type: "loadPromptFromFile" });
+  };
+
   override render() {
     return html`
       <sl-tab-group>
@@ -201,7 +226,12 @@ class JpProofreaderApp extends LitElement {
           <jp-settings-pane
             .systemPrompt=${this._systemPrompt}
             .defaultSystemPrompt=${this._defaultSystemPrompt}
+            .promptFilePath=${this._promptFilePath}
+            .fileOpError=${this._fileOpError}
+            .loadVersion=${this._loadVersion}
             @jp-save-settings=${this._handleSaveSettings}
+            @jp-save-prompt-to-file=${this._handleSavePromptToFile}
+            @jp-load-prompt-from-file=${this._handleLoadPromptFromFile}
           ></jp-settings-pane>
         </sl-tab-panel>
       </sl-tab-group>

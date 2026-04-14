@@ -34,3 +34,5 @@ levelの値:
 7. 差別表現`;
 
 export const SYSTEM_PROMPT_KEY = "jp-proofreader.systemPrompt";
+export const SYSTEM_PROMPT_FILE_KEY = "jp-proofreader.systemPromptFile";
+export const DEFAULT_PROMPT_FILE_NAME = "jp-proofreader-prompt.txt";
