@@ -94,13 +94,23 @@ export class JpReviewPane extends LitElement {
       display: flex;
       flex-direction: column;
     }
+    sl-textarea::part(form-control) {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+    }
     sl-textarea::part(base),
-    sl-textarea::part(form-control),
     sl-textarea::part(form-control-input) {
       display: flex;
       flex-direction: column;
       flex: 1;
       min-height: 0;
+      width: 100%;
+      box-sizing: border-box;
     }
     sl-textarea::part(textarea) {
       flex: 1;

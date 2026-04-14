@@ -152,10 +152,10 @@ export class ProofreaderPanel {
       .replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
       .replace(/&nbsp;/g, " ");
-    // 空白のみ・改行のみの行を削除
-    text = text.replace(/^[ \t\u3000]*$/gm, "");
     // 3個以上連続する半角・全角スペースを1つに圧縮
     text = text.replace(/[ \u3000]{3,}/g, " ");
+    // 空白のみ・改行のみの行を削除
+    text = text.replace(/^[ \t\u3000]*$/gm, "");
     // 3回以上連続する改行を2つに圧縮
     text = text.replace(/\n{3,}/g, "\n\n");
     return text.trim();
