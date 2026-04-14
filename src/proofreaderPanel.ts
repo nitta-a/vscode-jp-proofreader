@@ -108,10 +108,11 @@ export class ProofreaderPanel {
           const content = fs.readFileSync(defaultFilePath, "utf-8");
           systemPrompt = content;
           promptFilePath = defaultFilePath;
+          this._log(`[sendSettings] auto-loaded default prompt file: ${defaultFilePath}`);
           void this._context.globalState.update(SYSTEM_PROMPT_KEY, content);
           void this._context.globalState.update(SYSTEM_PROMPT_FILE_KEY, defaultFilePath);
         } catch {
-          // Unreadable — fall back to built-in default.
+          // File does not exist or is unreadable — fall back to built-in default.
         }
       }
     }
@@ -124,14 +125,13 @@ export class ProofreaderPanel {
     });
   }
 
-  /** Return the path to the default prompt file in the workspace root, or null if not found. */
+  /** Return the path to the default prompt file in the workspace root, or null if no workspace is open. */
   private _getDefaultPromptFilePath(): string | null {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) {
       return null;
     }
-    const filePath = path.join(workspaceFolder.uri.fsPath, DEFAULT_PROMPT_FILE_NAME);
-    return fs.existsSync(filePath) ? filePath : null;
+    return path.join(workspaceFolder.uri.fsPath, DEFAULT_PROMPT_FILE_NAME);
   }
 
   /** Save the given system prompt to the default file in the workspace root. */
