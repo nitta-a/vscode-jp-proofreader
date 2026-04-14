@@ -1,8 +1,16 @@
 import * as vscode from "vscode";
 import * as crypto from "node:crypto";
+import * as fs from "node:fs";
 import * as http from "node:http";
 import * as https from "node:https";
-import { DEFAULT_SYSTEM_PROMPT, JSON_CONVERSION_PROMPT, SYSTEM_PROMPT_KEY } from "./constants.js";
+import * as path from "node:path";
+import {
+  DEFAULT_PROMPT_FILE_NAME,
+  DEFAULT_SYSTEM_PROMPT,
+  JSON_CONVERSION_PROMPT,
+  SYSTEM_PROMPT_FILE_KEY,
+  SYSTEM_PROMPT_KEY,
+} from "./constants.js";
 
 /**
  * Singleton WebviewPanel that hosts the JP Proofreader UI.
@@ -70,6 +78,10 @@ export class ProofreaderPanel {
         } else if (msg.type === "setSettings" && typeof msg.systemPrompt === "string") {
           void this._context.globalState.update(SYSTEM_PROMPT_KEY, msg.systemPrompt);
           this._sendSettings();
+        } else if (msg.type === "savePromptToFile" && typeof msg.systemPrompt === "string") {
+          void this._savePromptToFile(msg.systemPrompt);
+        } else if (msg.type === "loadPromptFromFile") {
+          void this._loadPromptFromFile();
         } else if (msg.type === "fetchUrl" && typeof msg.url === "string") {
           void this._fetchUrl(msg.url);
         }
@@ -83,11 +95,88 @@ export class ProofreaderPanel {
 
   private _sendSettings(): void {
     const stored = this._context.globalState.get<string>(SYSTEM_PROMPT_KEY);
+    let systemPrompt = DEFAULT_SYSTEM_PROMPT;
+    let promptFilePath = this._context.globalState.get<string>(SYSTEM_PROMPT_FILE_KEY);
+
+    if (stored) {
+      systemPrompt = stored;
+    } else {
+      // On first launch (no stored prompt), load from the default file if it exists.
+      const defaultFilePath = this._getDefaultPromptFilePath();
+      if (defaultFilePath) {
+        try {
+          const content = fs.readFileSync(defaultFilePath, "utf-8");
+          systemPrompt = content;
+          promptFilePath = defaultFilePath;
+          void this._context.globalState.update(SYSTEM_PROMPT_KEY, content);
+          void this._context.globalState.update(SYSTEM_PROMPT_FILE_KEY, defaultFilePath);
+        } catch {
+          // Unreadable — fall back to built-in default.
+        }
+      }
+    }
+
     void this._panel.webview.postMessage({
       type: "settings",
-      systemPrompt: stored ?? DEFAULT_SYSTEM_PROMPT,
+      systemPrompt,
       defaultSystemPrompt: DEFAULT_SYSTEM_PROMPT,
+      promptFilePath,
     });
+  }
+
+  /** Return the path to the default prompt file in the workspace root, or null if not found. */
+  private _getDefaultPromptFilePath(): string | null {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      return null;
+    }
+    const filePath = path.join(workspaceFolder.uri.fsPath, DEFAULT_PROMPT_FILE_NAME);
+    return fs.existsSync(filePath) ? filePath : null;
+  }
+
+  /** Save the given system prompt to the default file in the workspace root. */
+  private async _savePromptToFile(systemPrompt: string): Promise<void> {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      void this._panel.webview.postMessage({
+        type: "promptFileError",
+        message: "ワークスペースが開かれていません。",
+      });
+      return;
+    }
+    const filePath = path.join(workspaceFolder.uri.fsPath, DEFAULT_PROMPT_FILE_NAME);
+    try {
+      fs.writeFileSync(filePath, systemPrompt, "utf-8");
+      await this._context.globalState.update(SYSTEM_PROMPT_FILE_KEY, filePath);
+      void this._panel.webview.postMessage({ type: "promptFileSaved", path: filePath });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      void this._panel.webview.postMessage({ type: "promptFileError", message: `保存エラー: ${message}` });
+    }
+  }
+
+  /** Open a file dialog and load the selected file as the system prompt. */
+  private async _loadPromptFromFile(): Promise<void> {
+    const uris = await vscode.window.showOpenDialog({
+      canSelectFiles: true,
+      canSelectFolders: false,
+      canSelectMany: false,
+      filters: { text: ["txt", "md"], all: ["*"] },
+      title: "システムプロンプトファイルを選択",
+    });
+    if (!uris || uris.length === 0) {
+      return;
+    }
+    const filePath = uris[0].fsPath;
+    try {
+      const content = fs.readFileSync(filePath, "utf-8");
+      await this._context.globalState.update(SYSTEM_PROMPT_KEY, content);
+      await this._context.globalState.update(SYSTEM_PROMPT_FILE_KEY, filePath);
+      void this._panel.webview.postMessage({ type: "promptFileLoaded", systemPrompt: content, path: filePath });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      void this._panel.webview.postMessage({ type: "promptFileError", message: `読み込みエラー: ${message}` });
+    }
   }
 
   private async _sendModels(): Promise<void> {

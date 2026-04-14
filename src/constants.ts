@@ -31,3 +31,5 @@ levelの値:
 4. 内容の明確さ`;
 
 export const SYSTEM_PROMPT_KEY = "jp-proofreader.systemPrompt";
+export const SYSTEM_PROMPT_FILE_KEY = "jp-proofreader.systemPromptFile";
+export const DEFAULT_PROMPT_FILE_NAME = "jp-proofreader-prompt.txt";

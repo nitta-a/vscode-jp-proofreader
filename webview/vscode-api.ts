@@ -16,15 +16,20 @@ export type HostMsg =
   | { type: "reviewChunk"; chunk: string }
   | { type: "reviewDone"; items?: ReviewItem[] }
   | { type: "reviewError"; message: string }
-  | { type: "settings"; systemPrompt: string; defaultSystemPrompt: string }
+  | { type: "settings"; systemPrompt: string; defaultSystemPrompt: string; promptFilePath?: string }
   | { type: "urlContent"; text: string }
-  | { type: "urlError"; message: string };
+  | { type: "urlError"; message: string }
+  | { type: "promptFileSaved"; path: string }
+  | { type: "promptFileLoaded"; systemPrompt: string; path: string }
+  | { type: "promptFileError"; message: string };
 
 type WebviewToHostMsg =
   | { type: "requestModels" }
   | { type: "review"; text: string; modelId: string }
   | { type: "getSettings" }
   | { type: "setSettings"; systemPrompt: string }
+  | { type: "savePromptToFile"; systemPrompt: string }
+  | { type: "loadPromptFromFile" }
   | { type: "fetchUrl"; url: string };
 
 // ---------------------------------------------------------------------------
