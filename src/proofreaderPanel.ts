@@ -13,18 +13,6 @@ import {
 } from "./constants.js";
 
 /**
- * Knowledge base for determining model suitability for proofreading.
- * Each entry pairs a regex (matched against model id or name) with a boolean result.
- * Entries are evaluated in order; the first match wins.
- */
-const MODEL_KNOWLEDGE_BASE: Array<{ pattern: RegExp; suitable: boolean }> = [
-  // Exclude lightweight models
-  { pattern: /mini|flash|haiku|nano/i, suitable: false },
-  // Allow capable models
-  { pattern: /gpt-4o|gpt-4|sonnet|opus|pro|o1|o3/i, suitable: true },
-];
-
-/**
  * Singleton WebviewPanel that hosts the JP Proofreader UI.
  * Manages Copilot LM API calls and relays results to the webview via postMessage.
  */
@@ -193,12 +181,33 @@ export class ProofreaderPanel {
 
   /**
    * Determine whether a model is suitable for proofreading based on its id and name.
-   * Evaluates MODEL_KNOWLEDGE_BASE in order; returns false for unknown models (no pattern match).
+   * Reads allowedModelPatterns and excludedModelPatterns from VS Code user settings.
+   * Excluded patterns take precedence over allowed patterns.
+   * Returns false when no pattern matches.
    */
   private _isSuitableForProofreading(modelId: string, modelName: string): boolean {
-    for (const entry of MODEL_KNOWLEDGE_BASE) {
-      if (entry.pattern.test(modelId) || entry.pattern.test(modelName)) {
-        return entry.suitable;
+    const config = vscode.workspace.getConfiguration("vscode-jp-proofreader");
+    const excludedPatterns = config.get<string[]>("excludedModelPatterns", ["mini", "flash", "haiku", "nano"]);
+    const allowedPatterns = config.get<string[]>("allowedModelPatterns", [
+      "gpt-4o",
+      "gpt-4",
+      "sonnet",
+      "opus",
+      "pro",
+      "o1",
+      "o3",
+    ]);
+
+    for (const raw of excludedPatterns) {
+      const re = new RegExp(raw, "i");
+      if (re.test(modelId) || re.test(modelName)) {
+        return false;
+      }
+    }
+    for (const raw of allowedPatterns) {
+      const re = new RegExp(raw, "i");
+      if (re.test(modelId) || re.test(modelName)) {
+        return true;
       }
     }
     return false;
