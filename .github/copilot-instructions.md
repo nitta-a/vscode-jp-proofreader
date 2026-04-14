@@ -2,7 +2,7 @@
 
 ## Overview
 
-VS Code extension that provides Japanese proofreading capabilities, including grammar and style checks, directly within the editor.
+VS Code extension that provides Japanese proofreading capabilities using GitHub Copilot LLM, including grammar checks, style improvements, and structured per-viewpoint feedback, directly within the editor.
 
 ## Directory Structure
 
@@ -15,26 +15,17 @@ vscode-jp-proofreader/
 │       └── release.yml           # Publish to VS Code Marketplace on tag push
 ├── images/                       # Extension icon and screenshot assets
 ├── src/
-│   ├── extension.ts              # Activation entry point; registers all commands and wires the pipeline
-│   ├── types.ts                  # Shared TypeScript interfaces (CopilotUsageStats, ParsingContext, …)
-│   ├── utils.ts                  # Shared helpers (e.g. todayDateString)
-│   ├── globals.d.ts              # Ambient declarations for webview global (acquireVsCodeApi)
-│   ├── ui/
-│   │   ├── copilotUsagePanel.ts      # Singleton WebviewPanel (createOrShow pattern)
-│   │   ├── copilotUsageHtml.ts       # Generates the HTML shell that loads the webview bundle
-│   │   ├── copilotUsageTreeProvider.ts  # TreeDataProvider powering the "Key Performance Indicators" sidebar view
-│   │   ├── dashboardMessages.ts      # Shared WebView ↔ Extension Host message types (HostToWebviewMessage, WebviewToHostMessage)
-│   │   ├── dashboardPayload.ts       # Standalone buildDashboardPayload() function (no VS Code deps; unit-testable)
-│   │   └── statusBarIndicator.ts
-│   ├── events/
-│   │   ├── eventSchema.ts
-│   │   ├── eventStorage.ts
-│   │   ├── eventTracker.ts
-│   │   └── inlineCompletionWrapper.ts   # Real-time inline-completion tracking via provider interception
-│   └── utils/
-│       └── logPaths.ts          # findSessionRoot() — segment-based VS Code log directory locator
+│   ├── constants.ts              # DEFAULT_SYSTEM_PROMPT, JSON_CONVERSION_PROMPT, SYSTEM_PROMPT_KEY
+│   ├── extension.ts              # Activation entry point: registers WebviewViewProvider, command, and Copilot chat participant
+│   ├── proofreaderPanel.ts       # Singleton WebviewPanel (createOrShow pattern): LM API calls, URL fetch, HTML generation
+│   └── viewProvider.ts           # Activity bar sidebar WebviewView: renders a button that opens the main panel
 ├── webview/                      # WebView frontend (compiled to dist/webview/ by tsconfig.webview.json)
-│   └── dashboard.ts              # Main dashboard orchestrator: tab switching, Chart.js timeline, export handling
+│   ├── components/
+│   │   ├── review-pane.ts        # Review UI: text input, URL loader, model selector, result accordion (jp-review-pane)
+│   │   └── settings-pane.ts      # Settings UI: system prompt editor with save/reset (jp-settings-pane)
+│   ├── dashboard.ts              # Root Lit component (jp-proofreader-app): tab switching, host↔webview message routing
+│   ├── tsconfig.json             # TypeScript compiler options for the webview bundle
+│   └── vscode-api.ts             # VS Code API singleton (acquireVsCodeApi) and shared message types (HostMsg, ReviewItem, ModelInfo)
 ├── test/                         # Mocha/vscode-test test files (*.test.ts)
 ├── dist/                         # Build output — extension.js + webview/ (CJS bundle, git-ignored)
 ├── biome.json                    # Biome linter + formatter config
@@ -50,7 +41,7 @@ vscode-jp-proofreader/
 |---|---|
 | One-shot dev build | `npm run compile` (type-check → lint → esbuild) |
 | Watch mode (dev) | `npm run watch` (parallel esbuild + tsc via `npm-run-all`) |
-| Production bundle | `npm run package` (builds native addon, then minified bundle, no sourcemap) |
+| Production bundle | `npm run package` (minified bundle, no sourcemap) |
 | Run tests | `npm test` (compiles tests + extension + lint, then `vscode-test`) |
 | Lint only | `npm run lint` |
 
@@ -58,12 +49,14 @@ Output goes to `dist/extension.js` (CJS, `vscode` external) and `dist/webview/` 
 
 ## Key Conventions
 
-- **Linter is Biome, not ESLint.** Config in `biome.json`; runs only on `src/**/*.ts`. Rules are non-recommended: `useBlockStatements`, `useNamingConvention`, `useThrowOnlyError`, `noDoubleEquals` (all `warn`).
+- **Linter is Biome, not ESLint.** Config in `biome.json`; runs on `./src` and `./test`. Rules: `useBlockStatements`, `useNamingConvention`, `useThrowOnlyError`, `noDoubleEquals` (all `warn`).
 - **Type-checking is separate from bundling.** `esbuild.js` never invokes `tsc`; type errors surface only via `check-types` / `watch:tsc`.
 - **WebviewPanel CSP:** uses a per-request `nonce` to allow only the bundled webview script; `localResourceRoots` is limited to `dist/webview/`.
-- **Error handling in parser:** every `fs` call is wrapped in `try/catch` that silently skips unreadable files/dirs — preserve this pattern.
-- **HTML generation:** `src/ui/copilotUsageHtml.ts` generates the HTML shell that loads the webview bundle. `src/ui/dashboardPayload.ts` builds the data payload sent to the WebView via `postMessage`.
-- **Dashboard messages:** always use the typed unions in `src/ui/dashboardMessages.ts` for WebView ↔ Host communication; never use ad-hoc string `type` fields.
+- **Two-phase review:** Phase 1 streams the LLM review text chunk-by-chunk to the webview. Phase 2 sends a standalone conversion request (`JSON_CONVERSION_PROMPT`) to transform the review into a structured JSON array of `ReviewItem` objects.
+- **HTML generation:** `src/proofreaderPanel.ts#_buildHtml()` generates the HTML shell that loads the webview bundle and injects the Shoelace asset base path via a `<meta name="sl-base">` tag.
+- **Shared message types:** always use the typed unions in `webview/vscode-api.ts` (`HostMsg`, `WebviewToHostMsg`) for WebView ↔ Host communication; never use ad-hoc string `type` fields.
+- **System prompt storage:** the user-customisable system prompt is persisted with `context.globalState` under the key `SYSTEM_PROMPT_KEY`; defaults to `DEFAULT_SYSTEM_PROMPT` when not set.
+- **URL fetch:** `src/proofreaderPanel.ts#_fetchUrl()` fetches a URL via Node's `http`/`https` and strips HTML to plain text before sending it to the webview. Redirects are followed up to 5 times.
 
 ## Adding New Commands
 
