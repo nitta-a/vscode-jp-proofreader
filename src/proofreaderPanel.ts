@@ -327,10 +327,22 @@ export class ProofreaderPanel {
       // Phase 2: Convert the review text to a structured JSON array.
       // Send a standalone request (not threaded conversation) to keep the token
       // payload small and avoid unbounded model output.
+      // Retry up to 2 additional times (3 total attempts) if the conversion returns null.
       this._log("[runReview] phase 2: converting to structured JSON…");
-      const items = await this._convertToStructuredItems(fullReviewText, model, tokenSource.token);
-      this._log(`[runReview] phase 2 done. items=${items ? items.length : "null"}`);
-      void this._panel.webview.postMessage({ type: "reviewDone", items: items ?? undefined });
+      const maxAttempts = 3;
+      let items: Array<{ viewpoint: string; level: string; content: string }> | null = null;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        items = await this._convertToStructuredItems(fullReviewText, model, tokenSource.token);
+        this._log(`[runReview] phase 2 attempt ${attempt}/${maxAttempts}: items=${items ? items.length : "null"}`);
+        if (items !== null) {
+          break;
+        }
+      }
+      if (items === null) {
+        this._log("[runReview] phase 2 failed after all attempts. using fallback error item.");
+        items = [{ viewpoint: "システムエラー", level: "error", content: "JSONの構造化に失敗しました" }];
+      }
+      void this._panel.webview.postMessage({ type: "reviewDone", items });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this._log(`[runReview] error: ${message}`);
@@ -374,13 +386,15 @@ export class ProofreaderPanel {
 
   /** Parse a JSON array of review items from raw LLM output. */
   private _parseItems(raw: string): Array<{ viewpoint: string; level: string; content: string }> | null {
-    const start = raw.indexOf("[");
-    const end = raw.lastIndexOf("]");
+    // Strip markdown code fences (e.g. ```json ... ``` or ``` ... ```)
+    const stripped = raw.replace(/^```(?:json)?\s*/gi, "").replace(/\s*```\s*$/g, "");
+    const start = stripped.indexOf("[");
+    const end = stripped.lastIndexOf("]");
     if (start === -1 || end === -1 || end < start) {
       return null;
     }
     try {
-      const parsed: unknown = JSON.parse(raw.slice(start, end + 1));
+      const parsed: unknown = JSON.parse(stripped.slice(start, end + 1));
       if (
         Array.isArray(parsed) &&
         parsed.every(
