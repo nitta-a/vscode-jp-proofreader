@@ -193,7 +193,7 @@ export class ProofreaderPanel {
 
   /**
    * Determine whether a model is suitable for proofreading based on its id and name.
-   * Evaluates MODEL_KNOWLEDGE_BASE in order; returns false for unknown models.
+   * Evaluates MODEL_KNOWLEDGE_BASE in order; returns false for unknown models (no pattern match).
    */
   private _isSuitableForProofreading(modelId: string, modelName: string): boolean {
     for (const entry of MODEL_KNOWLEDGE_BASE) {
