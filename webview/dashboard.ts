@@ -94,25 +94,32 @@ class JpProofreaderApp extends LitElement {
 
   private readonly _handleMsg = (ev: MessageEvent<HostMsg>): void => {
     const msg = ev.data;
+    console.log(`[JP Proofreader] host→webview type="${msg.type}"`);
     if (msg.type === "models") {
+      console.log(`[JP Proofreader] models received: ${msg.models.length}`);
       this._models = msg.models;
       if (msg.models.length === 0) {
         this._hostError = "利用可能なモデルがありません (GitHub Copilot が必要です)";
       }
     } else if (msg.type === "reviewChunk") {
+      console.log(`[JP Proofreader] reviewChunk length=${msg.chunk.length}`);
       this._result += msg.chunk;
     } else if (msg.type === "reviewDone") {
+      console.log(`[JP Proofreader] reviewDone. resultLength=${this._result.length}`);
       this._loading = false;
     } else if (msg.type === "reviewError") {
+      console.error(`[JP Proofreader] reviewError: ${msg.message}`);
       this._loading = false;
       this._hostError = msg.message;
     } else if (msg.type === "settings") {
       this._systemPrompt = msg.systemPrompt;
       this._defaultSystemPrompt = msg.defaultSystemPrompt;
     } else if (msg.type === "urlContent") {
+      console.log(`[JP Proofreader] urlContent length=${msg.text.length}`);
       this._urlLoading = false;
       this._urlText = msg.text;
     } else if (msg.type === "urlError") {
+      console.error(`[JP Proofreader] urlError: ${msg.message}`);
       this._urlLoading = false;
       this._hostError = msg.message;
     }
@@ -126,6 +133,7 @@ class JpProofreaderApp extends LitElement {
   };
 
   private _handleReview = (e: CustomEvent<ReviewRequestDetail>): void => {
+    console.log(`[JP Proofreader] review requested. modelId="${e.detail.modelId}" textLength=${e.detail.text.length}`);
     this._hostError = "";
     this._result = "";
     this._loading = true;

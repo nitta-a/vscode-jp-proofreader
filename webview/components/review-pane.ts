@@ -8,6 +8,7 @@ import "@shoelace-style/shoelace/dist/components/button/button.js";
 import "@shoelace-style/shoelace/dist/components/input/input.js";
 import "@shoelace-style/shoelace/dist/components/option/option.js";
 import "@shoelace-style/shoelace/dist/components/select/select.js";
+import "@shoelace-style/shoelace/dist/components/spinner/spinner.js";
 import "@shoelace-style/shoelace/dist/components/split-panel/split-panel.js";
 import "@shoelace-style/shoelace/dist/components/textarea/textarea.js";
 import type SlInput from "@shoelace-style/shoelace/dist/components/input/input.js";
@@ -138,6 +139,15 @@ export class JpReviewPane extends LitElement {
       font-style: italic;
       opacity: 0.4;
     }
+    .result-box.loading {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    .loading-text {
+      font-style: italic;
+      opacity: 0.6;
+    }
 
     .url-row {
       display: flex;
@@ -190,6 +200,7 @@ export class JpReviewPane extends LitElement {
 
   override render() {
     const showPlaceholder = !this.result && !this.loading;
+    const showLoading = this.loading && !this.result;
     const displayError = this._validationError || this.hostError;
 
     return html`
@@ -247,8 +258,12 @@ export class JpReviewPane extends LitElement {
 
           ${displayError ? html`<p class="error-msg">${displayError}</p>` : nothing}
 
-          <div class="result-box ${showPlaceholder ? "placeholder" : ""}">
-            ${showPlaceholder ? "レビュー結果がここに表示されます" : this.result}
+          <div class="result-box ${showPlaceholder ? "placeholder" : ""} ${showLoading ? "loading" : ""}">
+            ${showPlaceholder
+              ? "レビュー結果がここに表示されます"
+              : showLoading
+                ? html`<sl-spinner></sl-spinner><span class="loading-text">AIが校閲中…</span>`
+                : this.result}
           </div>
         </div>
       </sl-split-panel>

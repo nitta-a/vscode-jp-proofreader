@@ -10,10 +10,23 @@ import { DEFAULT_SYSTEM_PROMPT, SYSTEM_PROMPT_KEY } from "./constants.js";
  */
 export class ProofreaderPanel {
   private static _current: ProofreaderPanel | undefined;
+  private static _outputChannel: vscode.OutputChannel | undefined;
 
   private readonly _panel: vscode.WebviewPanel;
   private readonly _context: vscode.ExtensionContext;
   private readonly _disposables: vscode.Disposable[] = [];
+
+  /** Write a log line to the output channel when jp-proofreader.enableLogs is true. */
+  private _log(message: string): void {
+    const enabled = vscode.workspace.getConfiguration("jp-proofreader").get<boolean>("enableLogs", false);
+    if (!enabled) {
+      return;
+    }
+    if (!ProofreaderPanel._outputChannel) {
+      ProofreaderPanel._outputChannel = vscode.window.createOutputChannel("JP Proofreader");
+    }
+    ProofreaderPanel._outputChannel.appendLine(`[${new Date().toISOString()}] ${message}`);
+  }
 
   static createOrShow(context: vscode.ExtensionContext): void {
     if (ProofreaderPanel._current) {
@@ -34,9 +47,11 @@ export class ProofreaderPanel {
 
     this._panel.webview.onDidReceiveMessage(
       (msg: { type: string; text?: string; modelId?: string; systemPrompt?: string; url?: string }) => {
+        this._log(`[webview→host] type="${msg.type}"`);
         if (msg.type === "requestModels") {
           void this._sendModels();
         } else if (msg.type === "review" && msg.text && msg.modelId) {
+          this._log(`[review] modelId="${msg.modelId}" textLength=${msg.text.length}`);
           void this._runReview(msg.text, msg.modelId);
         } else if (msg.type === "getSettings") {
           this._sendSettings();
@@ -64,13 +79,17 @@ export class ProofreaderPanel {
   }
 
   private async _sendModels(): Promise<void> {
+    this._log("[sendModels] fetching Copilot models…");
     try {
       const models = await vscode.lm.selectChatModels({ vendor: "copilot" });
+      this._log(`[sendModels] found ${models.length} model(s): ${models.map((m) => m.id).join(", ")}`);
       const modelInfos = models.map((m) => ({ id: m.id, name: `${m.name} (${m.family})` }));
       // モデル名のアルファベット順にソート
       modelInfos.sort((a, b) => a.name.localeCompare(b.name));
       void this._panel.webview.postMessage({ type: "models", models: modelInfos });
-    } catch {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this._log(`[sendModels] error: ${message}`);
       void this._panel.webview.postMessage({ type: "models", models: [] });
     }
   }
@@ -165,24 +184,34 @@ export class ProofreaderPanel {
     const tokenSource = new vscode.CancellationTokenSource();
     this._disposables.push(tokenSource);
     try {
+      this._log(`[runReview] selecting model id="${modelId}"…`);
       const [model] = await vscode.lm.selectChatModels({ id: modelId });
       if (!model) {
+        this._log(`[runReview] model not found: "${modelId}"`);
         void this._panel.webview.postMessage({
           type: "reviewError",
           message: "指定されたモデルが見つかりません。Copilot が有効か確認してください。",
         });
         return;
       }
+      this._log(`[runReview] model found: "${model.id}" (${model.family}). sending request…`);
       const systemPrompt = this._context.globalState.get<string>(SYSTEM_PROMPT_KEY) ?? DEFAULT_SYSTEM_PROMPT;
       const prompt = `${systemPrompt}\n\nテキスト:\n${text}`;
       const messages = [vscode.LanguageModelChatMessage.User(prompt)];
       const response = await model.sendRequest(messages, {}, tokenSource.token);
+      let chunkCount = 0;
+      let totalLength = 0;
       for await (const chunk of response.text) {
+        chunkCount++;
+        totalLength += chunk.length;
+        this._log(`[runReview] chunk #${chunkCount} length=${chunk.length}`);
         void this._panel.webview.postMessage({ type: "reviewChunk", chunk });
       }
+      this._log(`[runReview] done. chunks=${chunkCount} totalLength=${totalLength}`);
       void this._panel.webview.postMessage({ type: "reviewDone" });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      this._log(`[runReview] error: ${message}`);
       void this._panel.webview.postMessage({ type: "reviewError", message });
     }
   }
