@@ -11,5 +11,5 @@
     "experimentalDecorators": true,
     "useDefineForClassFields": false
   },
-  "include": ["webview/**/*.ts", "webview/**/*.tsx", "src/ui/dashboardMessages.ts"]
+  "include": ["webview/**/*.ts", "webview/**/*.tsx"]
 }

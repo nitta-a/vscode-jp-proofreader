@@ -12,12 +12,11 @@
     "vscode": "^1.105.0",
     "node": ">=22.22.0"
   },
-  "categories": [
-    "Other"
-  ],
+  "categories": ["Other"],
   "activationEvents": [
     "onCommand:jp-proofreader.check",
-    "onView:jp-proofreader-view"
+    "onView:jp-proofreader-view",
+    "onChatParticipant:jp-proofreader.proofreader"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -45,6 +44,14 @@
         }
       ]
     },
+    "chatParticipants": [
+      {
+        "id": "jp-proofreader.proofreader",
+        "name": "proofreader",
+        "description": "日本語テキストの校閲を行います。テキストを入力してください。",
+        "isSticky": false
+      }
+    ],
     "configuration": {
       "title": "JP Proofreader Settings",
       "properties": {

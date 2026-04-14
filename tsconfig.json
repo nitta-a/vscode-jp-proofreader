@@ -3,6 +3,7 @@
     "module": "NodeNext",
     "target": "ES2024",
     "lib": ["ES2024"],
+    "rootDir": ".",
     "sourceMap": true,
     "strict": true /* enable all strict type-checking options */,
     /* Additional Checks */
