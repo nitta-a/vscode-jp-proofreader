@@ -8,6 +8,9 @@
 
 export type ModelInfo = { id: string; name: string };
 
+export type ReviewLevel = "ok" | "suggestion" | "error";
+export type ReviewItem = { viewpoint: string; level: ReviewLevel; content: string };
+
 export type HostMsg =
   | { type: "models"; models: ModelInfo[] }
   | { type: "reviewChunk"; chunk: string }

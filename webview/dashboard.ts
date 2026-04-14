@@ -21,7 +21,7 @@ import "./components/settings-pane";
 import type { FetchUrlDetail, ReviewRequestDetail } from "./components/review-pane";
 import type { SaveSettingsDetail } from "./components/settings-pane";
 // Shared API singleton and types
-import { type HostMsg, type ModelInfo, vscode } from "./vscode-api";
+import { type HostMsg, type ModelInfo, type ReviewItem, vscode } from "./vscode-api";
 
 // Read Shoelace asset base path from the meta tag injected by the extension host.
 setBasePath(document.querySelector<HTMLMetaElement>('meta[name="sl-base"]')?.content ?? "");
@@ -31,6 +31,7 @@ class JpProofreaderApp extends LitElement {
   @state() private _models: ModelInfo[] = [];
   @state() private _loading = false;
   @state() private _result = "";
+  @state() private _reviewItems: ReviewItem[] | null = null;
   @state() private _hostError = "";
   @state() private _systemPrompt = "";
   @state() private _defaultSystemPrompt = "";
@@ -107,6 +108,7 @@ class JpProofreaderApp extends LitElement {
     } else if (msg.type === "reviewDone") {
       console.log(`[JP Proofreader] reviewDone. resultLength=${this._result.length}`);
       this._loading = false;
+      this._reviewItems = this._parseReviewItems(this._result);
     } else if (msg.type === "reviewError") {
       console.error(`[JP Proofreader] reviewError: ${msg.message}`);
       this._loading = false;
@@ -136,9 +138,34 @@ class JpProofreaderApp extends LitElement {
     console.log(`[JP Proofreader] review requested. modelId="${e.detail.modelId}" textLength=${e.detail.text.length}`);
     this._hostError = "";
     this._result = "";
+    this._reviewItems = null;
     this._loading = true;
     vscode.postMessage({ type: "review", text: e.detail.text, modelId: e.detail.modelId });
   };
+
+  private _parseReviewItems(raw: string): ReviewItem[] | null {
+    // Strip optional ```json ... ``` wrapper that LLMs sometimes add.
+    const stripped = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+    try {
+      const parsed: unknown = JSON.parse(stripped);
+      if (
+        Array.isArray(parsed) &&
+        parsed.every(
+          (item) =>
+            typeof item === "object" &&
+            item !== null &&
+            typeof (item as Record<string, unknown>).viewpoint === "string" &&
+            typeof (item as Record<string, unknown>).level === "string" &&
+            typeof (item as Record<string, unknown>).content === "string",
+        )
+      ) {
+        return parsed as ReviewItem[];
+      }
+    } catch {
+      // fall through
+    }
+    return null;
+  }
 
   private _handleSaveSettings = (e: CustomEvent<SaveSettingsDetail>): void => {
     vscode.postMessage({ type: "setSettings", systemPrompt: e.detail.systemPrompt });
@@ -155,6 +182,7 @@ class JpProofreaderApp extends LitElement {
             .models=${this._models}
             ?loading=${this._loading}
             .result=${this._result}
+            .reviewItems=${this._reviewItems}
             .hostError=${this._hostError}
             .urlText=${this._urlText}
             ?urlLoading=${this._urlLoading}
