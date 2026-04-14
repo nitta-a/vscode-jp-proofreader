@@ -324,9 +324,41 @@ export class ProofreaderPanel {
       }
       this._log(`[runReview] model found: "${model.id}" (${model.family}). sending request…`);
 
-      // Phase 1: Stream the review using the user's system prompt.
+      // Load custom rules from the workspace root (.proofreaderrc.txt or proofreader-dict.txt).
+      let customRules = "";
+      const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+      if (workspaceFolder) {
+        for (const fileName of [".proofreaderrc.txt", "proofreader-dict.txt"]) {
+          const fileUri = vscode.Uri.joinPath(workspaceFolder.uri, fileName);
+          try {
+            const bytes = await vscode.workspace.fs.readFile(fileUri);
+            customRules = new TextDecoder().decode(bytes);
+            this._log(`[runReview] loaded custom rules from ${fileName}`);
+            break;
+          } catch {
+            // File does not exist — try the next candidate.
+          }
+        }
+      }
+
+      // Get the language ID of the document currently open in the active editor.
+      // Only accept safe identifier characters to prevent prompt injection.
+      const rawLanguageId = vscode.window.activeTextEditor?.document.languageId ?? "";
+      const languageId = /^[\w.-]+$/.test(rawLanguageId) ? rawLanguageId : "";
+
+      // Phase 1: Stream the review using the user's system prompt, augmented with
+      // language context and project-specific custom rules when available.
       const systemPrompt = this._context.globalState.get<string>(SYSTEM_PROMPT_KEY) ?? DEFAULT_SYSTEM_PROMPT;
-      const phase1Prompt = `${systemPrompt}\n\nテキスト:\n${text}`;
+      let dynamicPrompt = systemPrompt;
+      if (languageId) {
+        dynamicPrompt +=
+          `\n\n対象テキストのフォーマットは '${languageId}' です。` +
+          "このフォーマットの構文（マークダウン記号など）は誤字脱字として扱わないでください。";
+      }
+      if (customRules) {
+        dynamicPrompt += `\n\n以下のプロジェクト固有のルールおよび用語集を最優先で遵守して校閲してください:\n${customRules}`;
+      }
+      const phase1Prompt = `${dynamicPrompt}\n\nテキスト:\n${text}`;
       const response = await model.sendRequest(
         [vscode.LanguageModelChatMessage.User(phase1Prompt)],
         {},
