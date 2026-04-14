@@ -247,7 +247,7 @@ export class JpReviewPane extends LitElement {
   };
 
   override render() {
-    const showPlaceholder = !this.result && !this.loading && !this.reviewItems;
+    const showPlaceholder = !this.result && !this.loading && this.reviewItems === null;
     const showLoading = this.loading && !this.result;
     const showItems = !this.loading && this.reviewItems !== null && this.reviewItems.length > 0;
     const showRawResult = !this.loading && !showItems && !!this.result;

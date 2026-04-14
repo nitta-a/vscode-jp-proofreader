@@ -144,10 +144,16 @@ class JpProofreaderApp extends LitElement {
   };
 
   private _parseReviewItems(raw: string): ReviewItem[] | null {
-    // Strip optional ```json ... ``` wrapper that LLMs sometimes add.
-    const stripped = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+    // Extract the JSON array, handling optional ```json...``` wrappers and
+    // any explanatory text the LLM may emit before or after the array.
+    const start = raw.indexOf("[");
+    const end = raw.lastIndexOf("]");
+    if (start === -1 || end === -1 || end < start) {
+      return null;
+    }
+    const jsonStr = raw.slice(start, end + 1);
     try {
-      const parsed: unknown = JSON.parse(stripped);
+      const parsed: unknown = JSON.parse(jsonStr);
       if (
         Array.isArray(parsed) &&
         parsed.every(
