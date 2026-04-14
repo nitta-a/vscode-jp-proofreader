@@ -1,9 +1,21 @@
 import * as vscode from "vscode";
-import { DEFAULT_SYSTEM_PROMPT, SYSTEM_PROMPT_KEY } from "./constants.js";
+import { DEFAULT_SYSTEM_PROMPT, DIAGNOSTIC_SOURCE, SYSTEM_PROMPT_KEY } from "./constants.js";
+import { ProofreaderCodeActionProvider } from "./codeActionProvider.js";
 import { ProofreaderPanel } from "./proofreaderPanel.js";
 import { ProofreaderViewProvider } from "./viewProvider.js";
 
 export function activate(context: vscode.ExtensionContext): void {
+  // DiagnosticCollection for editor wave-underline annotations
+  const diagnosticCollection = vscode.languages.createDiagnosticCollection(DIAGNOSTIC_SOURCE);
+  context.subscriptions.push(diagnosticCollection);
+
+  // CodeActionProvider for quick-fix replacements
+  context.subscriptions.push(
+    vscode.languages.registerCodeActionsProvider("*", new ProofreaderCodeActionProvider(), {
+      providedCodeActionKinds: [vscode.CodeActionKind.QuickFix],
+    }),
+  );
+
   // Sidebar view (activity bar icon → WebviewView)
   const viewProvider = new ProofreaderViewProvider(context);
   context.subscriptions.push(
@@ -15,7 +27,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // Command: open the panel in the editor area
   context.subscriptions.push(
     vscode.commands.registerCommand("jp-proofreader.check", () => {
-      ProofreaderPanel.createOrShow(context);
+      ProofreaderPanel.createOrShow(context, diagnosticCollection);
     }),
   );
 

@@ -9,7 +9,13 @@
 export type ModelInfo = { id: string; name: string };
 
 export type ReviewLevel = "ok" | "suggestion" | "error";
-export type ReviewItem = { viewpoint: string; level: ReviewLevel; content: string };
+export type ReviewItem = {
+  viewpoint: string;
+  level: ReviewLevel;
+  content: string;
+  targetText: string;
+  replacementText: string;
+};
 
 export type HostMsg =
   | { type: "models"; models: ModelInfo[] }
