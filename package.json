@@ -3,32 +3,92 @@
   "displayName": "JP Proofreader",
   "description": "Japanese proofreading extension for VS Code",
   "version": "0.0.1",
-  "engines": {
-    "vscode": "^1.80.0"
+  "icon": "images/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nitta-a/vscode-jp-proofreader"
   },
-  "categories": [
-    "Other"
-  ],
-  "activationEvents": [
-    "onCommand:jp-proofreader.check"
-  ],
-  "main": "./out/extension.js",
+  "engines": {
+    "vscode": "^1.105.0",
+    "node": ">=22.22.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onCommand:jp-proofreader.check", "onView:jp-proofreader-view"],
+  "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
         "command": "jp-proofreader.check",
         "title": "JP Proofreader: Check"
       }
-    ]
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "jp-proofreader-container",
+          "title": "JP Proofreader",
+          "icon": "images/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "jp-proofreader-container": [
+        {
+          "type": "webview",
+          "id": "jp-proofreader-view",
+          "name": "JP Proofreader"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "JP Proofreader Settings",
+      "properties": {
+        "jp-proofreader.enableLogs": {
+          "type": "boolean",
+          "default": false,
+          "description": "Output detailed [LOG] messages to the console for debugging purposes."
+        }
+      }
+    }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "check-types": "tsc --noEmit",
+    "lint": "biome lint ./src ./test",
+    "lint:fix": "biome lint --write ./src ./test",
+    "format": "biome format ./src ./test",
+    "format:fix": "biome format --write ./src ./test",
+    "test": "vscode-test",
+    "vsce:pre-package": "vsce package --pre-release --no-dependencies",
+    "vsce:package": "vsce package",
+    "vsce:pre-publish": "vsce publish --pre-release --no-dependencies",
+    "vsce:publish": "vsce publish",
+    "in": "code --install-extension ",
+    "inf": "code --force --install-extension ",
+    "p": "npm run package && npm run vsce:package"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.11",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^24.x",
     "@types/vscode": "^1.80.0",
-    "@types/node": "^20.0.0",
-    "typescript": "^5.0.0"
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.7.1",
+    "esbuild": "^0.28.0",
+    "npm-run-all": "^4.1.5",
+    "typescript": "^6.0.2"
+  },
+  "overrides": {
+    "diff": ">8.0.2",
+    "serialize-javascript": ">7.0.4"
   }
 }
