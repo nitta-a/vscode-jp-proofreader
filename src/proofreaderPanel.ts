@@ -15,6 +15,8 @@ export class ProofreaderPanel {
   private readonly _panel: vscode.WebviewPanel;
   private readonly _context: vscode.ExtensionContext;
   private readonly _disposables: vscode.Disposable[] = [];
+  /** Token source for the currently running review — cancelled when a new review starts. */
+  private _currentReviewTokenSource: vscode.CancellationTokenSource | undefined;
 
   /** Write a log line to the output channel when jp-proofreader.enableLogs is true. */
   private _log(message: string): void {
@@ -58,6 +60,10 @@ export class ProofreaderPanel {
           void this._sendModels();
         } else if (msg.type === "review" && msg.text && msg.modelId) {
           this._log(`[review] modelId="${msg.modelId}" textLength=${msg.text.length}`);
+          // Cancel any in-flight review before starting a new one.
+          this._currentReviewTokenSource?.cancel();
+          this._currentReviewTokenSource?.dispose();
+          this._currentReviewTokenSource = undefined;
           void this._runReview(msg.text, msg.modelId);
         } else if (msg.type === "getSettings") {
           this._sendSettings();
@@ -188,7 +194,7 @@ export class ProofreaderPanel {
 
   private async _runReview(text: string, modelId: string): Promise<void> {
     const tokenSource = new vscode.CancellationTokenSource();
-    this._disposables.push(tokenSource);
+    this._currentReviewTokenSource = tokenSource;
     try {
       this._log(`[runReview] selecting model id="${modelId}"…`);
       const [model] = await vscode.lm.selectChatModels({ id: modelId });
@@ -205,8 +211,11 @@ export class ProofreaderPanel {
       // Phase 1: Stream the review using the user's system prompt.
       const systemPrompt = this._context.globalState.get<string>(SYSTEM_PROMPT_KEY) ?? DEFAULT_SYSTEM_PROMPT;
       const phase1Prompt = `${systemPrompt}\n\nテキスト:\n${text}`;
-      const phase1Messages = [vscode.LanguageModelChatMessage.User(phase1Prompt)];
-      const response = await model.sendRequest(phase1Messages, {}, tokenSource.token);
+      const response = await model.sendRequest(
+        [vscode.LanguageModelChatMessage.User(phase1Prompt)],
+        {},
+        tokenSource.token,
+      );
       let chunkCount = 0;
       let totalLength = 0;
       let fullReviewText = "";
@@ -227,32 +236,38 @@ export class ProofreaderPanel {
       }
 
       // Phase 2: Convert the review text to a structured JSON array.
+      // Send a standalone request (not threaded conversation) to keep the token
+      // payload small and avoid unbounded model output.
       this._log("[runReview] phase 2: converting to structured JSON…");
-      const items = await this._convertToStructuredItems(phase1Messages, fullReviewText, model, tokenSource.token);
+      const items = await this._convertToStructuredItems(fullReviewText, model, tokenSource.token);
       this._log(`[runReview] phase 2 done. items=${items ? items.length : "null"}`);
       void this._panel.webview.postMessage({ type: "reviewDone", items: items ?? undefined });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this._log(`[runReview] error: ${message}`);
       void this._panel.webview.postMessage({ type: "reviewError", message });
+    } finally {
+      // Clean up the token source when this review completes (or errors/is cancelled).
+      if (this._currentReviewTokenSource === tokenSource) {
+        this._currentReviewTokenSource = undefined;
+      }
+      tokenSource.dispose();
     }
   }
 
   /**
-   * Phase 2: send a conversion request with the full conversation history and return
+   * Phase 2: send a standalone conversion request (no conversation history) and return
    * a parsed ReviewItem array, or null if conversion or parsing fails.
+   * Using a standalone message keeps the token payload small and avoids unbounded output.
    */
   private async _convertToStructuredItems(
-    phase1Messages: vscode.LanguageModelChatMessage[],
-    assistantResponse: string,
+    reviewText: string,
     model: vscode.LanguageModelChat,
     token: vscode.CancellationToken,
   ): Promise<Array<{ viewpoint: string; level: string; content: string }> | null> {
     try {
       const phase2Messages = [
-        ...phase1Messages,
-        vscode.LanguageModelChatMessage.Assistant(assistantResponse),
-        vscode.LanguageModelChatMessage.User(JSON_CONVERSION_PROMPT),
+        vscode.LanguageModelChatMessage.User(`${JSON_CONVERSION_PROMPT}\n\n校閲結果:\n${reviewText}`),
       ];
       const response = await model.sendRequest(phase2Messages, {}, token);
       let raw = "";
