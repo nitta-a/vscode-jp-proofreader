@@ -45,10 +45,10 @@ export class JpReviewPane extends LitElement {
   @state() private _urlInput = "";
 
   override willUpdate(changed: Map<PropertyKey, unknown>): void {
-    // Set default model when models first arrive — prefer gpt-5-mini.
+    // Set default model when models first arrive — prefer gpt-4o.
     if (changed.has("models") && this.models.length > 0 && !this._modelId) {
       const preferred = this.models.find(
-        (m) => m.id.toLowerCase().includes("gpt-5-mini") || m.name.toLowerCase().includes("gpt-5-mini"),
+        (m) => m.id.toLowerCase().includes("gpt-4o") || m.name.toLowerCase().includes("gpt-4o"),
       );
       this._modelId = (preferred ?? this.models[0]).id;
     }
