@@ -249,7 +249,7 @@ export class JpReviewPane extends LitElement {
   override render() {
     const showPlaceholder = !this.result && !this.loading && this.reviewItems === null;
     const showLoading = this.loading && !this.result;
-    const showItems = !this.loading && this.reviewItems !== null && this.reviewItems.length > 0;
+    const showItems = !this.loading && (this.reviewItems?.length ?? 0) > 0;
     const showRawResult = !this.loading && !showItems && !!this.result;
     const displayError = this._validationError || this.hostError;
 
