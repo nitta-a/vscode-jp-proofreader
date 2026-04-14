@@ -36,24 +36,11 @@ vscode-jp-proofreader/
 ├── webview/                      # WebView frontend (compiled to dist/webview/ by tsconfig.webview.json)
 │   └── dashboard.ts              # Main dashboard orchestrator: tab switching, Chart.js timeline, export handling
 ├── test/                         # Mocha/vscode-test test files (*.test.ts)
-│   ├── extension.test.ts
-│   ├── utils.test.ts
-│   ├── ui/
-│   │   ├── copilotUsageTreeProvider.test.ts
-│   │   ├── dashboardPayload.test.ts
-│   │   └── statusBarIndicator.test.ts
-│   ├── events/
-│       ├── eventSchema.test.ts
-│       ├── eventStorage.test.ts
-│       ├── eventTracker.test.ts
-│       └── inlineCompletionWrapper.test.ts
 ├── dist/                         # Build output — extension.js + webview/ (CJS bundle, git-ignored)
-├── bin/
-│   └── mcp-server.js             # MCP server entry point (registered via contributes.mcpServers)
 ├── biome.json                    # Biome linter + formatter config
 ├── esbuild.js                    # esbuild bundler script (dev and production modes)
 ├── package.json                  # Extension manifest, commands, configuration, scripts
-├── tsconfig.json                 # TypeScript compiler options (target: ES2022, module: Node16)
+├── tsconfig.json                 # TypeScript compiler options (target: ES2024, module: NodeNext)
 └── tsconfig.webview.json         # TypeScript compiler options for the webview bundle
 ```
 
@@ -64,7 +51,6 @@ vscode-jp-proofreader/
 | One-shot dev build | `npm run compile` (type-check → lint → esbuild) |
 | Watch mode (dev) | `npm run watch` (parallel esbuild + tsc via `npm-run-all`) |
 | Production bundle | `npm run package` (builds native addon, then minified bundle, no sourcemap) |
-| Build native addon | `npm run build:native` (NAPI-RS Rust → `.node` addon in `native-parser/`) |
 | Run tests | `npm test` (compiles tests + extension + lint, then `vscode-test`) |
 | Lint only | `npm run lint` |
 

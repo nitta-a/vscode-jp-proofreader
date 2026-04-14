@@ -12,8 +12,13 @@
     "vscode": "^1.105.0",
     "node": ">=22.22.0"
   },
-  "categories": ["Other"],
-  "activationEvents": ["onCommand:jp-proofreader.check", "onView:jp-proofreader-view"],
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:jp-proofreader.check",
+    "onView:jp-proofreader-view"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
@@ -90,5 +95,9 @@
   "overrides": {
     "diff": ">8.0.2",
     "serialize-javascript": ">7.0.4"
+  },
+  "dependencies": {
+    "@shoelace-style/shoelace": "^2.20.1",
+    "lit": "^3.3.2"
   }
 }

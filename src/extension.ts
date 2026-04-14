@@ -54,10 +54,11 @@ class ProofreaderPanel {
     this._panel.webview.html = this._buildHtml(panel.webview, context);
 
     this._panel.webview.onDidReceiveMessage(
-      (msg: { type: string; text: string }) => {
-        if (msg.type === "review") {
-          const result = proofread(msg.text);
-          void panel.webview.postMessage({ type: "reviewResult", result });
+      (msg: { type: string; text?: string; modelId?: string }) => {
+        if (msg.type === "requestModels") {
+          void this._sendModels();
+        } else if (msg.type === "review" && msg.text && msg.modelId) {
+          void this._runReview(msg.text, msg.modelId);
         }
       },
       undefined,
@@ -67,108 +68,83 @@ class ProofreaderPanel {
     this._panel.onDidDispose(() => this._disposePanel(), undefined, this._disposables);
   }
 
+  private async _sendModels(): Promise<void> {
+    try {
+      const models = await vscode.lm.selectChatModels({ vendor: "copilot" });
+      const modelInfos = models.map((m) => ({ id: m.id, name: `${m.name} (${m.family})` }));
+      // mini モデルを先頭に（gpt-4o-mini / gpt-5-mini 等を優先）
+      modelInfos.sort((a, b) => {
+        const aIsMini = a.name.toLowerCase().includes("mini");
+        const bIsMini = b.name.toLowerCase().includes("mini");
+        if (aIsMini && !bIsMini) {
+          return -1;
+        }
+        if (!aIsMini && bIsMini) {
+          return 1;
+        }
+        return 0;
+      });
+      void this._panel.webview.postMessage({ type: "models", models: modelInfos });
+    } catch {
+      void this._panel.webview.postMessage({ type: "models", models: [] });
+    }
+  }
+
+  private async _runReview(text: string, modelId: string): Promise<void> {
+    const tokenSource = new vscode.CancellationTokenSource();
+    this._disposables.push(tokenSource);
+    try {
+      const [model] = await vscode.lm.selectChatModels({ id: modelId });
+      if (!model) {
+        void this._panel.webview.postMessage({
+          type: "reviewError",
+          message: "指定されたモデルが見つかりません。Copilot が有効か確認してください。",
+        });
+        return;
+      }
+      const prompt = [
+        "以下の日本語テキストを校閲してください。",
+        "文法的な誤り、表現の不自然さ、誤字脱字、冗長な表現などを指摘し、改善案を提示してください。",
+        "",
+        `テキスト:\n${text}`,
+      ].join("\n");
+      const messages = [vscode.LanguageModelChatMessage.User(prompt)];
+      const response = await model.sendRequest(messages, {}, tokenSource.token);
+      for await (const chunk of response.text) {
+        void this._panel.webview.postMessage({ type: "reviewChunk", chunk });
+      }
+      void this._panel.webview.postMessage({ type: "reviewDone" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      void this._panel.webview.postMessage({ type: "reviewError", message });
+    }
+  }
+
   private _buildHtml(webview: vscode.Webview, context: vscode.ExtensionContext): string {
     const scriptUri = webview.asWebviewUri(
       vscode.Uri.joinPath(context.extensionUri, "dist", "webview", "dashboard.js"),
     );
+    const cssUri = webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, "dist", "webview", "dashboard.css"));
+    // Base path for Shoelace icons/assets (dist/webview/ directory)
+    const slBase = webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, "dist", "webview")).toString();
     const nonce = crypto.randomBytes(16).toString("hex");
+    const csp = webview.cspSource;
     return `<!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}'; style-src ${csp} 'unsafe-inline'; img-src ${csp} data: blob:; font-src ${csp};">
+  <meta name="sl-base" content="${slBase}">
+  <link rel="stylesheet" href="${cssUri}">
   <title>JP Proofreader</title>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      display: flex;
-      height: 100vh;
-      font-family: var(--vscode-font-family, sans-serif);
-      font-size: var(--vscode-font-size, 13px);
-      color: var(--vscode-editor-foreground);
-      background: var(--vscode-editor-background);
-    }
-    .pane {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      padding: 16px;
-      gap: 8px;
-      overflow: hidden;
-    }
-    .pane + .pane {
-      border-left: 1px solid var(--vscode-panel-border, #444);
-    }
-    h2 {
-      font-size: 12px;
-      font-weight: 600;
-      opacity: 0.7;
-      flex-shrink: 0;
-    }
-    #input-text {
-      flex: 1;
-      width: 100%;
-      resize: none;
-      background: var(--vscode-input-background, #1e1e1e);
-      color: var(--vscode-input-foreground, #d4d4d4);
-      border: 1px solid var(--vscode-input-border, #3c3c3c);
-      border-radius: 4px;
-      padding: 10px;
-      font-family: inherit;
-      font-size: inherit;
-      line-height: 1.6;
-      outline: none;
-    }
-    #input-text:focus {
-      border-color: var(--vscode-focusBorder, #007fd4);
-    }
-    #btn-review {
-      flex-shrink: 0;
-      padding: 8px 16px;
-      background: var(--vscode-button-background, #0e639c);
-      color: var(--vscode-button-foreground, #fff);
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-family: inherit;
-      font-size: inherit;
-      font-weight: 600;
-    }
-    #btn-review:hover:not(:disabled) {
-      background: var(--vscode-button-hoverBackground, #1177bb);
-    }
-    #btn-review:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-    #review-result {
-      flex: 1;
-      overflow-y: auto;
-      white-space: pre-wrap;
-      padding: 10px;
-      background: var(--vscode-input-background, #1e1e1e);
-      border: 1px solid var(--vscode-input-border, #3c3c3c);
-      border-radius: 4px;
-      line-height: 1.6;
-      font-size: 12px;
-    }
-    #review-result:empty::before {
-      content: "レビュー結果がここに表示されます";
-      opacity: 0.4;
-    }
+    html, body { height: 100%; margin: 0; padding: 0; background: var(--vscode-editor-background); }
+    jp-proofreader-app { display: block; height: 100%; }
   </style>
 </head>
-<body>
-  <div class="pane">
-    <h2>テキスト入力</h2>
-    <textarea id="input-text" placeholder="校閲したいテキストを入力してください…"></textarea>
-  </div>
-  <div class="pane">
-    <h2>AIレビュー</h2>
-    <button id="btn-review">AIレビュー</button>
-    <div id="review-result"></div>
-  </div>
+<body class="sl-theme-dark">
+  <jp-proofreader-app></jp-proofreader-app>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

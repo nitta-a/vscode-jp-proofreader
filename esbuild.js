@@ -1,5 +1,6 @@
 // @ts-check
 const esbuild = require("esbuild");
+const { promises: fsp } = require("fs");
 const { version } = require("./package.json");
 
 const production = process.argv.includes("--production");
@@ -66,6 +67,8 @@ async function main() {
   });
 
   if (watch) {
+    // Copy Shoelace assets once on start, then watch for JS/CSS changes.
+    await copyShoelaceAssets();
     await ctx.watch();
     await webviewCtx.watch();
   } else {
@@ -73,7 +76,17 @@ async function main() {
     await ctx.dispose();
     await webviewCtx.rebuild();
     await webviewCtx.dispose();
+    await copyShoelaceAssets();
   }
+}
+
+/** Copy Shoelace icons / assets to dist/webview/assets so the webview can load them. */
+async function copyShoelaceAssets() {
+  await fsp.mkdir("dist/webview", { recursive: true });
+  await fsp.cp("node_modules/@shoelace-style/shoelace/dist/assets", "dist/webview/assets", {
+    recursive: true,
+    force: true,
+  });
 }
 
 main().catch((e) => {
