@@ -33,8 +33,10 @@ export function activate(context: vscode.ExtensionContext): void {
       const messages = [vscode.LanguageModelChatMessage.User(prompt)];
       try {
         const response = await request.model.sendRequest(messages, {}, token);
-        for await (const chunk of response.text) {
-          stream.markdown(chunk);
+        for await (const part of response.stream) {
+          if (part instanceof vscode.LanguageModelTextPart) {
+            stream.markdown(part.value);
+          }
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

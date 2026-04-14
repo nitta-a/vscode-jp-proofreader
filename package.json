@@ -13,11 +13,7 @@
     "node": ">=22.22.0"
   },
   "categories": ["Other"],
-  "activationEvents": [
-    "onCommand:jp-proofreader.check",
-    "onView:jp-proofreader-view",
-    "onChatParticipant:jp-proofreader.proofreader"
-  ],
+  "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [

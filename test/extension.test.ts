@@ -1,10 +1,19 @@
-import * as assert from "node:assert";
-
 import * as vscode from "vscode";
-
+import * as assert from "node:assert";
 import { activate, deactivate } from "../src/extension.js";
 
 suite("extension", () => {
+  suiteSetup(async () => {
+    const ext = vscode.extensions.all.find(
+      (e) =>
+        e.id.includes("vscode-jp-proofreader") ||
+        (e.packageJSON as { name?: string })?.name === "vscode-jp-proofreader",
+    );
+    if (ext && !ext.isActive) {
+      await ext.activate();
+    }
+  });
+
   test("activate and deactivate should be exported functions", () => {
     assert.strictEqual(typeof activate, "function");
     assert.strictEqual(typeof deactivate, "function");

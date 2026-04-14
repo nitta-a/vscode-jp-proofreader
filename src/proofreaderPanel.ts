@@ -214,6 +214,13 @@ export class ProofreaderPanel {
         void this._panel.webview.postMessage({ type: "reviewChunk", chunk });
       }
       this._log(`[runReview] done. chunks=${chunkCount} totalLength=${totalLength}`);
+      if (chunkCount === 0) {
+        void this._panel.webview.postMessage({
+          type: "reviewError",
+          message: `モデル "${modelId}" が応答を返しませんでした。別のモデルを選択してください。`,
+        });
+        return;
+      }
       void this._panel.webview.postMessage({ type: "reviewDone" });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
