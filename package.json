@@ -55,6 +55,18 @@
           "type": "boolean",
           "default": false,
           "description": "Output detailed [LOG] messages to the console for debugging purposes."
+        },
+        "vscode-jp-proofreader.allowedModelPatterns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["gpt-4o", "gpt-4", "sonnet", "opus", "pro", "o1", "o3"],
+          "description": "校閲に使用を許可するモデルを識別するための正規表現パターンの一覧（大文字小文字を区別しない）。除外リストに該当しないモデルのうち、このリストのいずれかにマッチするモデルが選択候補として表示されます。"
+        },
+        "vscode-jp-proofreader.excludedModelPatterns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["mini", "flash", "haiku", "nano"],
+          "description": "校閲への使用から除外するモデルを識別するための正規表現パターンの一覧（大文字小文字を区別しない）。このリストのいずれかにマッチするモデルは、許可リストの設定にかかわらず表示されません。"
         }
       }
     }
