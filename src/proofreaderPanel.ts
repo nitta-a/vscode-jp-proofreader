@@ -28,6 +28,12 @@ export class ProofreaderPanel {
     ProofreaderPanel._outputChannel.appendLine(`[${new Date().toISOString()}] ${message}`);
   }
 
+  /** Dispose the shared output channel on extension deactivation. */
+  static disposeOutputChannel(): void {
+    ProofreaderPanel._outputChannel?.dispose();
+    ProofreaderPanel._outputChannel = undefined;
+  }
+
   static createOrShow(context: vscode.ExtensionContext): void {
     if (ProofreaderPanel._current) {
       ProofreaderPanel._current._panel.reveal();
