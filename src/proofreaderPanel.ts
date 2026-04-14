@@ -219,12 +219,15 @@ export class ProofreaderPanel {
       let chunkCount = 0;
       let totalLength = 0;
       let fullReviewText = "";
-      for await (const chunk of response.text) {
-        chunkCount++;
-        totalLength += chunk.length;
-        fullReviewText += chunk;
-        this._log(`[runReview] chunk #${chunkCount} length=${chunk.length}`);
-        void this._panel.webview.postMessage({ type: "reviewChunk", chunk });
+      for await (const part of response.stream) {
+        if (part instanceof vscode.LanguageModelTextPart) {
+          const chunk = part.value;
+          chunkCount++;
+          totalLength += chunk.length;
+          fullReviewText += chunk;
+          this._log(`[runReview] chunk #${chunkCount} length=${chunk.length}`);
+          void this._panel.webview.postMessage({ type: "reviewChunk", chunk });
+        }
       }
       this._log(`[runReview] done. chunks=${chunkCount} totalLength=${totalLength}`);
       if (chunkCount === 0) {
@@ -271,8 +274,10 @@ export class ProofreaderPanel {
       ];
       const response = await model.sendRequest(phase2Messages, {}, token);
       let raw = "";
-      for await (const chunk of response.text) {
-        raw += chunk;
+      for await (const part of response.stream) {
+        if (part instanceof vscode.LanguageModelTextPart) {
+          raw += part.value;
+        }
       }
       this._log(`[convertToStructuredItems] raw response length=${raw.length}`);
       return this._parseItems(raw);
