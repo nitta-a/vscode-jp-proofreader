@@ -5,10 +5,12 @@
  */
 
 import "@shoelace-style/shoelace/dist/components/button/button.js";
+import "@shoelace-style/shoelace/dist/components/input/input.js";
 import "@shoelace-style/shoelace/dist/components/option/option.js";
 import "@shoelace-style/shoelace/dist/components/select/select.js";
 import "@shoelace-style/shoelace/dist/components/split-panel/split-panel.js";
 import "@shoelace-style/shoelace/dist/components/textarea/textarea.js";
+import type SlInput from "@shoelace-style/shoelace/dist/components/input/input.js";
 import type SlSelect from "@shoelace-style/shoelace/dist/components/select/select.js";
 import type SlTextarea from "@shoelace-style/shoelace/dist/components/textarea/textarea.js";
 import { css, html, LitElement, nothing } from "lit";
@@ -16,6 +18,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import type { ModelInfo } from "../vscode-api";
 
 export type ReviewRequestDetail = { text: string; modelId: string };
+export type FetchUrlDetail = { url: string };
 
 @customElement("jp-review-pane")
 export class JpReviewPane extends LitElement {
@@ -27,15 +30,27 @@ export class JpReviewPane extends LitElement {
   @property() result = "";
   /** Error message originating from the host (e.g. API failure). */
   @property() hostError = "";
+  /** Text fetched from URL by the host — applied to textarea when set. */
+  @property() urlText = "";
+  /** Whether URL fetch is in progress. */
+  @property({ type: Boolean }) urlLoading = false;
 
   @state() private _inputText = "";
   @state() private _modelId = "";
   @state() private _validationError = "";
+  @state() private _urlInput = "";
 
   override willUpdate(changed: Map<PropertyKey, unknown>): void {
-    // Set default model when models first arrive.
+    // Set default model when models first arrive — prefer gpt-5-mini.
     if (changed.has("models") && this.models.length > 0 && !this._modelId) {
-      this._modelId = this.models[0].id;
+      const preferred = this.models.find(
+        (m) => m.id.toLowerCase().includes("gpt-5-mini") || m.name.toLowerCase().includes("gpt-5-mini"),
+      );
+      this._modelId = (preferred ?? this.models[0]).id;
+    }
+    // Apply text fetched from URL into the textarea.
+    if (changed.has("urlText") && this.urlText) {
+      this._inputText = this.urlText;
     }
   }
 
@@ -56,6 +71,7 @@ export class JpReviewPane extends LitElement {
       flex-direction: column;
       gap: 12px;
       height: 100%;
+      width: 100%;
       padding: 16px;
       box-sizing: border-box;
       overflow: hidden;
@@ -74,6 +90,7 @@ export class JpReviewPane extends LitElement {
     sl-textarea {
       flex: 1;
       min-height: 0;
+      width: 100%;
       display: flex;
       flex-direction: column;
     }
@@ -112,6 +129,16 @@ export class JpReviewPane extends LitElement {
       opacity: 0.4;
     }
 
+    .url-row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+      flex-shrink: 0;
+    }
+    .url-row sl-input {
+      flex: 1;
+    }
+
     .error-msg {
       font-size: 12px;
       color: var(--sl-color-danger-600, #e03131);
@@ -120,7 +147,19 @@ export class JpReviewPane extends LitElement {
     }
   `;
 
-  private _startReview(): void {
+  private _loadUrl = (): void => {
+    const url = this._urlInput.trim();
+    if (!url) return;
+    this.dispatchEvent(
+      new CustomEvent<FetchUrlDetail>("jp-fetch-url", {
+        detail: { url },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  };
+
+  private _startReview = (): void => {
     this._validationError = "";
     if (!this._inputText.trim()) {
       this._validationError = "テキストを入力してください。";
@@ -137,7 +176,7 @@ export class JpReviewPane extends LitElement {
         composed: true,
       }),
     );
-  }
+  };
 
   override render() {
     const showPlaceholder = !this.result && !this.loading;
@@ -147,6 +186,24 @@ export class JpReviewPane extends LitElement {
       <sl-split-panel>
         <div slot="start" class="pane">
           <p class="pane-label">テキスト入力</p>
+          <div class="url-row">
+            <sl-input
+              placeholder="URLを入力して読み込む (例: https://example.com/article)"
+              type="url"
+              .value=${this._urlInput}
+              @sl-input=${(e: CustomEvent) => {
+                this._urlInput = (e.target as SlInput).value;
+              }}
+              @keydown=${(e: KeyboardEvent) => {
+                if (e.key === "Enter") this._loadUrl();
+              }}
+            ></sl-input>
+            <sl-button
+              ?loading=${this.urlLoading}
+              ?disabled=${this.urlLoading || !this._urlInput.trim()}
+              @click=${this._loadUrl}
+            >読み込み</sl-button>
+          </div>
           <sl-textarea
             placeholder="校閲したいテキストを入力してください…"
             .value=${this._inputText}

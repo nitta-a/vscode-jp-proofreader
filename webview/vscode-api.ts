@@ -13,13 +13,16 @@ export type HostMsg =
   | { type: "reviewChunk"; chunk: string }
   | { type: "reviewDone" }
   | { type: "reviewError"; message: string }
-  | { type: "settings"; systemPrompt: string; defaultSystemPrompt: string };
+  | { type: "settings"; systemPrompt: string; defaultSystemPrompt: string }
+  | { type: "urlContent"; text: string }
+  | { type: "urlError"; message: string };
 
 type WebviewToHostMsg =
   | { type: "requestModels" }
   | { type: "review"; text: string; modelId: string }
   | { type: "getSettings" }
-  | { type: "setSettings"; systemPrompt: string };
+  | { type: "setSettings"; systemPrompt: string }
+  | { type: "fetchUrl"; url: string };
 
 // ---------------------------------------------------------------------------
 // Singleton

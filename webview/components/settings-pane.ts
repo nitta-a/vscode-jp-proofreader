@@ -59,6 +59,7 @@ export class JpSettingsPane extends LitElement {
 
     sl-textarea {
       flex: 1;
+      width: 100%;
     }
 
     .settings-actions {
@@ -74,7 +75,7 @@ export class JpSettingsPane extends LitElement {
     }
   `;
 
-  private _save(): void {
+  private _save = (): void => {
     this.dispatchEvent(
       new CustomEvent<SaveSettingsDetail>("jp-save-settings", {
         detail: { systemPrompt: this._localPrompt },
@@ -87,11 +88,11 @@ export class JpSettingsPane extends LitElement {
     this._saveTimer = setTimeout(() => {
       this._settingsSaved = false;
     }, 2000);
-  }
+  };
 
-  private _reset(): void {
+  private _reset = (): void => {
     this._localPrompt = this.defaultSystemPrompt;
-  }
+  };
 
   override render() {
     return html`

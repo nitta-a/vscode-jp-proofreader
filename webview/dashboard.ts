@@ -18,7 +18,7 @@ import { customElement, state } from "lit/decorators.js";
 // Child components
 import "./components/review-pane";
 import "./components/settings-pane";
-import type { ReviewRequestDetail } from "./components/review-pane";
+import type { FetchUrlDetail, ReviewRequestDetail } from "./components/review-pane";
 import type { SaveSettingsDetail } from "./components/settings-pane";
 // Shared API singleton and types
 import { type HostMsg, type ModelInfo, vscode } from "./vscode-api";
@@ -34,6 +34,8 @@ class JpProofreaderApp extends LitElement {
   @state() private _hostError = "";
   @state() private _systemPrompt = "";
   @state() private _defaultSystemPrompt = "";
+  @state() private _urlText = "";
+  @state() private _urlLoading = false;
 
   static override styles = css`
     :host {
@@ -107,19 +109,32 @@ class JpProofreaderApp extends LitElement {
     } else if (msg.type === "settings") {
       this._systemPrompt = msg.systemPrompt;
       this._defaultSystemPrompt = msg.defaultSystemPrompt;
+    } else if (msg.type === "urlContent") {
+      this._urlLoading = false;
+      this._urlText = msg.text;
+    } else if (msg.type === "urlError") {
+      this._urlLoading = false;
+      this._hostError = msg.message;
     }
   };
 
-  private _handleReview(e: CustomEvent<ReviewRequestDetail>): void {
+  private _handleFetchUrl = (e: CustomEvent<FetchUrlDetail>): void => {
+    this._hostError = "";
+    this._urlLoading = true;
+    this._urlText = "";
+    vscode.postMessage({ type: "fetchUrl", url: e.detail.url });
+  };
+
+  private _handleReview = (e: CustomEvent<ReviewRequestDetail>): void => {
     this._hostError = "";
     this._result = "";
     this._loading = true;
     vscode.postMessage({ type: "review", text: e.detail.text, modelId: e.detail.modelId });
-  }
+  };
 
-  private _handleSaveSettings(e: CustomEvent<SaveSettingsDetail>): void {
+  private _handleSaveSettings = (e: CustomEvent<SaveSettingsDetail>): void => {
     vscode.postMessage({ type: "setSettings", systemPrompt: e.detail.systemPrompt });
-  }
+  };
 
   override render() {
     return html`
@@ -133,7 +148,10 @@ class JpProofreaderApp extends LitElement {
             ?loading=${this._loading}
             .result=${this._result}
             .hostError=${this._hostError}
+            .urlText=${this._urlText}
+            ?urlLoading=${this._urlLoading}
             @jp-review=${this._handleReview}
+            @jp-fetch-url=${this._handleFetchUrl}
           ></jp-review-pane>
         </sl-tab-panel>
 
