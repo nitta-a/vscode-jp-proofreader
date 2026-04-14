@@ -18,12 +18,13 @@ export class ProofreaderCodeActionProvider implements vscode.CodeActionProvider 
         continue;
       }
       const replacementText = typeof diagnostic.code === "string" ? diagnostic.code : undefined;
+      // Only offer a QuickFix when a concrete replacement is available.
+      // An empty replacementText means no suggestion was provided, so skip.
       if (!replacementText) {
         continue;
       }
       const action = new vscode.CodeAction(`修正を適用: "${replacementText}"`, vscode.CodeActionKind.QuickFix);
       action.diagnostics = [diagnostic];
-      action.isPreferred = true;
       const edit = new vscode.WorkspaceEdit();
       edit.replace(document.uri, diagnostic.range, replacementText);
       action.edit = edit;
