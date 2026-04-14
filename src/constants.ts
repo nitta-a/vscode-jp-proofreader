@@ -15,7 +15,9 @@ export const JSON_CONVERSION_PROMPT = `上記の校閲結果を、以下のJSON�
   {
     "viewpoint": "観点名",
     "level": "ok" または "suggestion" または "error",
-    "content": "この観点についての詳細な説明"
+    "content": "この観点についての詳細な説明",
+    "targetText": "指摘対象となる元のテキストの抜粋（該当箇所がない場合は空文字\"\"）",
+    "replacementText": "修正案のテキスト（ない場合は空文字\"\"）"
   }
 ]
 
@@ -23,6 +25,9 @@ levelの値:
 - "ok"         : 問題なし
 - "suggestion" : 改善提案あり（必須ではない）
 - "error"      : 要修正
+
+targetText: 指摘対象となる元のテキストの文字列。具体的な箇所がない場合は空文字("")。
+replacementText: targetTextの修正案のテキスト。修正案がない場合は空文字("")。
 
 必ず以下の7つの観点をすべて含めてください（観点が明示されていない場合は内容から判断してください）:
 1. 誤字・脱字
@@ -36,3 +41,4 @@ levelの値:
 export const SYSTEM_PROMPT_KEY = "jp-proofreader.systemPrompt";
 export const SYSTEM_PROMPT_FILE_KEY = "jp-proofreader.systemPromptFile";
 export const DEFAULT_PROMPT_FILE_NAME = "jp-proofreader-prompt.txt";
+export const DIAGNOSTIC_SOURCE = "vscode-jp-proofreader";

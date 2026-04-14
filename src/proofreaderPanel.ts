@@ -7,6 +7,7 @@ import * as path from "node:path";
 import {
   DEFAULT_PROMPT_FILE_NAME,
   DEFAULT_SYSTEM_PROMPT,
+  DIAGNOSTIC_SOURCE,
   JSON_CONVERSION_PROMPT,
   SYSTEM_PROMPT_FILE_KEY,
   SYSTEM_PROMPT_KEY,
@@ -22,6 +23,7 @@ export class ProofreaderPanel {
 
   private readonly _panel: vscode.WebviewPanel;
   private readonly _context: vscode.ExtensionContext;
+  private readonly _diagnosticCollection: vscode.DiagnosticCollection | undefined;
   private readonly _disposables: vscode.Disposable[] = [];
   /** Token source for the currently running review — cancelled when a new review starts. */
   private _currentReviewTokenSource: vscode.CancellationTokenSource | undefined;
@@ -44,7 +46,7 @@ export class ProofreaderPanel {
     ProofreaderPanel._outputChannel = undefined;
   }
 
-  static createOrShow(context: vscode.ExtensionContext): void {
+  static createOrShow(context: vscode.ExtensionContext, diagnosticCollection?: vscode.DiagnosticCollection): void {
     if (ProofreaderPanel._current) {
       ProofreaderPanel._current._panel.reveal();
       return;
@@ -53,12 +55,17 @@ export class ProofreaderPanel {
       enableScripts: true,
       localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, "dist", "webview")],
     });
-    ProofreaderPanel._current = new ProofreaderPanel(panel, context);
+    ProofreaderPanel._current = new ProofreaderPanel(panel, context, diagnosticCollection);
   }
 
-  constructor(panel: vscode.WebviewPanel, context: vscode.ExtensionContext) {
+  constructor(
+    panel: vscode.WebviewPanel,
+    context: vscode.ExtensionContext,
+    diagnosticCollection?: vscode.DiagnosticCollection,
+  ) {
     this._panel = panel;
     this._context = context;
+    this._diagnosticCollection = diagnosticCollection;
     this._panel.webview.html = this._buildHtml(panel.webview, context);
 
     this._panel.webview.onDidReceiveMessage(
@@ -328,6 +335,8 @@ export class ProofreaderPanel {
   private async _runReview(text: string, modelId: string): Promise<void> {
     const tokenSource = new vscode.CancellationTokenSource();
     this._currentReviewTokenSource = tokenSource;
+    // Clear any existing diagnostics from a previous review.
+    this._diagnosticCollection?.clear();
     try {
       this._log(`[runReview] selecting model id="${modelId}"…`);
       const [model] = await vscode.lm.selectChatModels({ id: modelId });
@@ -406,6 +415,9 @@ export class ProofreaderPanel {
       this._log("[runReview] phase 2: converting to structured JSON…");
       const items = await this._convertToStructuredItems(fullReviewText, model, tokenSource.token);
       this._log(`[runReview] phase 2 done. items=${items ? items.length : "null"}`);
+      if (items) {
+        this._setDiagnostics(items);
+      }
       void this._panel.webview.postMessage({ type: "reviewDone", items: items ?? undefined });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -429,7 +441,13 @@ export class ProofreaderPanel {
     reviewText: string,
     model: vscode.LanguageModelChat,
     token: vscode.CancellationToken,
-  ): Promise<Array<{ viewpoint: string; level: string; content: string }> | null> {
+  ): Promise<Array<{
+    viewpoint: string;
+    level: string;
+    content: string;
+    targetText: string;
+    replacementText: string;
+  }> | null> {
     try {
       const phase2Messages = [
         vscode.LanguageModelChatMessage.User(`${JSON_CONVERSION_PROMPT}\n\n校閲結果:\n${reviewText}`),
@@ -449,7 +467,9 @@ export class ProofreaderPanel {
   }
 
   /** Parse a JSON array of review items from raw LLM output. */
-  private _parseItems(raw: string): Array<{ viewpoint: string; level: string; content: string }> | null {
+  private _parseItems(
+    raw: string,
+  ): Array<{ viewpoint: string; level: string; content: string; targetText: string; replacementText: string }> | null {
     const start = raw.indexOf("[");
     const end = raw.lastIndexOf("]");
     if (start === -1 || end === -1 || end < start) {
@@ -465,15 +485,68 @@ export class ProofreaderPanel {
             item !== null &&
             typeof (item as Record<string, unknown>).viewpoint === "string" &&
             typeof (item as Record<string, unknown>).level === "string" &&
-            typeof (item as Record<string, unknown>).content === "string",
+            typeof (item as Record<string, unknown>).content === "string" &&
+            typeof (item as Record<string, unknown>).targetText === "string" &&
+            typeof (item as Record<string, unknown>).replacementText === "string",
         )
       ) {
-        return parsed as Array<{ viewpoint: string; level: string; content: string }>;
+        return parsed as Array<{
+          viewpoint: string;
+          level: string;
+          content: string;
+          targetText: string;
+          replacementText: string;
+        }>;
       }
     } catch {
       // fall through
     }
     return null;
+  }
+
+  /**
+   * Set VS Code editor diagnostics based on the review items.
+   * Searches for each item's targetText in the active text editor's document and
+   * attaches a Diagnostic at that location.
+   */
+  private _setDiagnostics(
+    items: Array<{ viewpoint: string; level: string; content: string; targetText: string; replacementText: string }>,
+  ): void {
+    if (!this._diagnosticCollection) {
+      return;
+    }
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      return;
+    }
+    const document = editor.document;
+    const docText = document.getText();
+    const diagnostics: vscode.Diagnostic[] = [];
+    for (const item of items) {
+      if (!item.targetText) {
+        continue;
+      }
+      const index = docText.indexOf(item.targetText);
+      if (index === -1) {
+        continue;
+      }
+      const start = document.positionAt(index);
+      const end = document.positionAt(index + item.targetText.length);
+      const range = new vscode.Range(start, end);
+      let severity: vscode.DiagnosticSeverity;
+      if (item.level === "error") {
+        severity = vscode.DiagnosticSeverity.Error;
+      } else if (item.level === "suggestion") {
+        severity = vscode.DiagnosticSeverity.Warning;
+      } else {
+        severity = vscode.DiagnosticSeverity.Information;
+      }
+      const diagnostic = new vscode.Diagnostic(range, item.content, severity);
+      diagnostic.source = DIAGNOSTIC_SOURCE;
+      diagnostic.code = item.replacementText;
+      diagnostics.push(diagnostic);
+    }
+    this._diagnosticCollection.set(document.uri, diagnostics);
   }
 
   private _buildHtml(webview: vscode.Webview, context: vscode.ExtensionContext): string {
