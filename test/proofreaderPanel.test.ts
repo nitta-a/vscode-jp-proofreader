@@ -53,15 +53,14 @@ function buildMockWebviewPanel(): vscode.WebviewPanel {
 
 suite("ProofreaderPanel", () => {
   let panel: ProofreaderPanel;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let htmlToText: (html: string) => string;
 
   suiteSetup(() => {
     const context = buildMockContext();
     const mockPanel = buildMockWebviewPanel();
     panel = new ProofreaderPanel(mockPanel, context);
-    // Access private method for testing
-    htmlToText = (html: string) => (panel as unknown as Record<string, (h: string) => string>)._htmlToText(html);
+    // Access private method via any cast for unit testing
+    htmlToText = (html: string) => (panel as any)._htmlToText(html);
   });
 
   suite("_htmlToText", () => {

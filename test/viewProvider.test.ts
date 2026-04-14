@@ -73,7 +73,7 @@ suite("ProofreaderViewProvider", () => {
     assert.ok(webview.html.includes("openPanel"), "HTML should include openPanel message");
   });
 
-  test("resolveWebviewView HTML should include Japanese button label", () => {
+  test("resolveWebviewView HTML should include JP Proofreader button text", () => {
     const { view, webview } = buildMockWebviewView();
     provider.resolveWebviewView(view);
     assert.ok(webview.html.includes("JP Proofreader"), "HTML should include JP Proofreader text");
