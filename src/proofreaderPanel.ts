@@ -199,15 +199,23 @@ export class ProofreaderPanel {
     ]);
 
     for (const raw of excludedPatterns) {
-      const re = new RegExp(raw, "i");
-      if (re.test(modelId) || re.test(modelName)) {
-        return false;
+      try {
+        const re = new RegExp(raw, "i");
+        if (re.test(modelId) || re.test(modelName)) {
+          return false;
+        }
+      } catch {
+        this._log(`[isSuitableForProofreading] invalid excludedModelPattern skipped: "${raw}"`);
       }
     }
     for (const raw of allowedPatterns) {
-      const re = new RegExp(raw, "i");
-      if (re.test(modelId) || re.test(modelName)) {
-        return true;
+      try {
+        const re = new RegExp(raw, "i");
+        if (re.test(modelId) || re.test(modelName)) {
+          return true;
+        }
+      } catch {
+        this._log(`[isSuitableForProofreading] invalid allowedModelPattern skipped: "${raw}"`);
       }
     }
     return false;
