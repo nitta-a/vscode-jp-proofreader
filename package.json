@@ -4,6 +4,7 @@
   "description": "Japanese proofreading extension for VS Code",
   "version": "0.0.1",
   "icon": "images/icon.png",
+  "publisher": "nitta-a",
   "repository": {
     "type": "git",
     "url": "https://github.com/nitta-a/vscode-jp-proofreader"
