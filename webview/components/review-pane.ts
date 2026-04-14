@@ -119,6 +119,8 @@ export class JpReviewPane extends LitElement {
     sl-textarea::part(textarea) {
       flex: 1;
       resize: none;
+      width: 100%;
+      box-sizing: border-box;
       font-family: var(--vscode-editor-font-family, monospace);
       font-size: var(--vscode-editor-font-size, 13px);
       line-height: 1.65;
