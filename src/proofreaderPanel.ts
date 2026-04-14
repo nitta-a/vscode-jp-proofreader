@@ -13,6 +13,18 @@ import {
 } from "./constants.js";
 
 /**
+ * Knowledge base for determining model suitability for proofreading.
+ * Each entry pairs a regex (matched against model id or name) with a boolean result.
+ * Entries are evaluated in order; the first match wins.
+ */
+const MODEL_KNOWLEDGE_BASE: Array<{ pattern: RegExp; suitable: boolean }> = [
+  // Exclude lightweight models
+  { pattern: /mini|flash|haiku|nano/i, suitable: false },
+  // Allow capable models
+  { pattern: /gpt-4o|gpt-4|sonnet|opus|pro|o1|o3/i, suitable: true },
+];
+
+/**
  * Singleton WebviewPanel that hosts the JP Proofreader UI.
  * Manages Copilot LM API calls and relays results to the webview via postMessage.
  */
@@ -179,12 +191,27 @@ export class ProofreaderPanel {
     }
   }
 
+  /**
+   * Determine whether a model is suitable for proofreading based on its id and name.
+   * Evaluates MODEL_KNOWLEDGE_BASE in order; returns false for unknown models (no pattern match).
+   */
+  private _isSuitableForProofreading(modelId: string, modelName: string): boolean {
+    for (const entry of MODEL_KNOWLEDGE_BASE) {
+      if (entry.pattern.test(modelId) || entry.pattern.test(modelName)) {
+        return entry.suitable;
+      }
+    }
+    return false;
+  }
+
   private async _sendModels(): Promise<void> {
     this._log("[sendModels] fetching Copilot models…");
     try {
       const models = await vscode.lm.selectChatModels({ vendor: "copilot" });
       this._log(`[sendModels] found ${models.length} model(s): ${models.map((m) => m.id).join(", ")}`);
-      const modelInfos = models.map((m) => ({ id: m.id, name: `${m.name} (${m.family})` }));
+      const filteredModels = models.filter((m) => this._isSuitableForProofreading(m.id, m.name));
+      this._log(`[sendModels] suitable model(s): ${filteredModels.map((m) => m.id).join(", ")}`);
+      const modelInfos = filteredModels.map((m) => ({ id: m.id, name: `${m.name} (${m.family})` }));
       // モデル名のアルファベット順にソート
       modelInfos.sort((a, b) => a.name.localeCompare(b.name));
       void this._panel.webview.postMessage({ type: "models", models: modelInfos });
