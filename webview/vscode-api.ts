@@ -8,10 +8,13 @@
 
 export type ModelInfo = { id: string; name: string };
 
+export type ReviewLevel = "ok" | "suggestion" | "error";
+export type ReviewItem = { viewpoint: string; level: ReviewLevel; content: string };
+
 export type HostMsg =
   | { type: "models"; models: ModelInfo[] }
   | { type: "reviewChunk"; chunk: string }
-  | { type: "reviewDone" }
+  | { type: "reviewDone"; items?: ReviewItem[] }
   | { type: "reviewError"; message: string }
   | { type: "settings"; systemPrompt: string; defaultSystemPrompt: string }
   | { type: "urlContent"; text: string }

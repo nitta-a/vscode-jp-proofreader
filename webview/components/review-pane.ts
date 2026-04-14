@@ -5,6 +5,7 @@
  */
 
 import "@shoelace-style/shoelace/dist/components/button/button.js";
+import "@shoelace-style/shoelace/dist/components/details/details.js";
 import "@shoelace-style/shoelace/dist/components/input/input.js";
 import "@shoelace-style/shoelace/dist/components/option/option.js";
 import "@shoelace-style/shoelace/dist/components/select/select.js";
@@ -16,7 +17,7 @@ import type SlSelect from "@shoelace-style/shoelace/dist/components/select/selec
 import type SlTextarea from "@shoelace-style/shoelace/dist/components/textarea/textarea.js";
 import { css, html, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import type { ModelInfo } from "../vscode-api";
+import type { ModelInfo, ReviewItem } from "../vscode-api";
 
 export type ReviewRequestDetail = { text: string; modelId: string };
 export type FetchUrlDetail = { url: string };
@@ -29,6 +30,8 @@ export class JpReviewPane extends LitElement {
   @property({ type: Boolean }) loading = false;
   /** Accumulated streaming result text from the host. */
   @property() result = "";
+  /** Parsed review items (per-viewpoint accordion data). Null means not yet parsed or parse failed. */
+  @property({ attribute: false }) reviewItems: ReviewItem[] | null = null;
   /** Error message originating from the host (e.g. API failure). */
   @property() hostError = "";
   /** Text fetched from URL by the host — applied to textarea when set. */
@@ -165,6 +168,51 @@ export class JpReviewPane extends LitElement {
       margin: 0;
       flex-shrink: 0;
     }
+
+    .review-items {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    sl-details {
+      --sl-spacing-medium: 10px;
+    }
+
+    .viewpoint-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .level-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .level-dot.ok {
+      background-color: #2f9e44;
+    }
+    .level-dot.suggestion {
+      background-color: #f08c00;
+    }
+    .level-dot.error {
+      background-color: #e03131;
+    }
+
+    .viewpoint-content {
+      font-size: 13px;
+      line-height: 1.7;
+      white-space: pre-wrap;
+      margin: 0;
+    }
   `;
 
   private _loadUrl = (): void => {
@@ -199,8 +247,10 @@ export class JpReviewPane extends LitElement {
   };
 
   override render() {
-    const showPlaceholder = !this.result && !this.loading;
+    const showPlaceholder = !this.result && !this.loading && this.reviewItems === null;
     const showLoading = this.loading && !this.result;
+    const showItems = !this.loading && (this.reviewItems?.length ?? 0) > 0;
+    const showRawResult = !this.loading && !showItems && !!this.result;
     const displayError = this._validationError || this.hostError;
 
     return html`
@@ -258,13 +308,33 @@ export class JpReviewPane extends LitElement {
 
           ${displayError ? html`<p class="error-msg">${displayError}</p>` : nothing}
 
-          <div class="result-box ${showPlaceholder ? "placeholder" : ""} ${showLoading ? "loading" : ""}">
-            ${showPlaceholder
-              ? "レビュー結果がここに表示されます"
-              : showLoading
-                ? html`<sl-spinner></sl-spinner><span class="loading-text">AIが校閲中…</span>`
-                : this.result}
-          </div>
+          ${showItems
+            ? html`
+                <div class="review-items">
+                  ${(this.reviewItems ?? []).map(
+                    (item) => html`
+                      <sl-details>
+                        <div slot="summary" class="viewpoint-header">
+                          <span class="level-dot ${item.level}"></span>
+                          ${item.viewpoint}
+                        </div>
+                        <p class="viewpoint-content">${item.content}</p>
+                      </sl-details>
+                    `,
+                  )}
+                </div>
+              `
+            : html`
+                <div class="result-box ${showPlaceholder ? "placeholder" : ""} ${showLoading ? "loading" : ""}">
+                  ${showPlaceholder
+                    ? "レビュー結果がここに表示されます"
+                    : showLoading
+                      ? html`<sl-spinner></sl-spinner><span class="loading-text">AIが校閲中…</span>`
+                      : showRawResult
+                        ? this.result
+                        : nothing}
+                </div>
+              `}
         </div>
       </sl-split-panel>
     `;

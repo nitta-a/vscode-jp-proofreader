@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import * as crypto from "node:crypto";
 import * as http from "node:http";
 import * as https from "node:https";
-import { DEFAULT_SYSTEM_PROMPT, SYSTEM_PROMPT_KEY } from "./constants.js";
+import { DEFAULT_SYSTEM_PROMPT, JSON_CONVERSION_PROMPT, SYSTEM_PROMPT_KEY } from "./constants.js";
 
 /**
  * Singleton WebviewPanel that hosts the JP Proofreader UI.
@@ -15,6 +15,8 @@ export class ProofreaderPanel {
   private readonly _panel: vscode.WebviewPanel;
   private readonly _context: vscode.ExtensionContext;
   private readonly _disposables: vscode.Disposable[] = [];
+  /** Token source for the currently running review — cancelled when a new review starts. */
+  private _currentReviewTokenSource: vscode.CancellationTokenSource | undefined;
 
   /** Write a log line to the output channel when jp-proofreader.enableLogs is true. */
   private _log(message: string): void {
@@ -58,6 +60,10 @@ export class ProofreaderPanel {
           void this._sendModels();
         } else if (msg.type === "review" && msg.text && msg.modelId) {
           this._log(`[review] modelId="${msg.modelId}" textLength=${msg.text.length}`);
+          // Cancel any in-flight review before starting a new one.
+          this._currentReviewTokenSource?.cancel();
+          this._currentReviewTokenSource?.dispose();
+          this._currentReviewTokenSource = undefined;
           void this._runReview(msg.text, msg.modelId);
         } else if (msg.type === "getSettings") {
           this._sendSettings();
@@ -188,7 +194,7 @@ export class ProofreaderPanel {
 
   private async _runReview(text: string, modelId: string): Promise<void> {
     const tokenSource = new vscode.CancellationTokenSource();
-    this._disposables.push(tokenSource);
+    this._currentReviewTokenSource = tokenSource;
     try {
       this._log(`[runReview] selecting model id="${modelId}"…`);
       const [model] = await vscode.lm.selectChatModels({ id: modelId });
@@ -201,15 +207,22 @@ export class ProofreaderPanel {
         return;
       }
       this._log(`[runReview] model found: "${model.id}" (${model.family}). sending request…`);
+
+      // Phase 1: Stream the review using the user's system prompt.
       const systemPrompt = this._context.globalState.get<string>(SYSTEM_PROMPT_KEY) ?? DEFAULT_SYSTEM_PROMPT;
-      const prompt = `${systemPrompt}\n\nテキスト:\n${text}`;
-      const messages = [vscode.LanguageModelChatMessage.User(prompt)];
-      const response = await model.sendRequest(messages, {}, tokenSource.token);
+      const phase1Prompt = `${systemPrompt}\n\nテキスト:\n${text}`;
+      const response = await model.sendRequest(
+        [vscode.LanguageModelChatMessage.User(phase1Prompt)],
+        {},
+        tokenSource.token,
+      );
       let chunkCount = 0;
       let totalLength = 0;
+      let fullReviewText = "";
       for await (const chunk of response.text) {
         chunkCount++;
         totalLength += chunk.length;
+        fullReviewText += chunk;
         this._log(`[runReview] chunk #${chunkCount} length=${chunk.length}`);
         void this._panel.webview.postMessage({ type: "reviewChunk", chunk });
       }
@@ -221,12 +234,81 @@ export class ProofreaderPanel {
         });
         return;
       }
-      void this._panel.webview.postMessage({ type: "reviewDone" });
+
+      // Phase 2: Convert the review text to a structured JSON array.
+      // Send a standalone request (not threaded conversation) to keep the token
+      // payload small and avoid unbounded model output.
+      this._log("[runReview] phase 2: converting to structured JSON…");
+      const items = await this._convertToStructuredItems(fullReviewText, model, tokenSource.token);
+      this._log(`[runReview] phase 2 done. items=${items ? items.length : "null"}`);
+      void this._panel.webview.postMessage({ type: "reviewDone", items: items ?? undefined });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this._log(`[runReview] error: ${message}`);
       void this._panel.webview.postMessage({ type: "reviewError", message });
+    } finally {
+      // Clean up the token source when this review completes (or errors/is cancelled).
+      if (this._currentReviewTokenSource === tokenSource) {
+        this._currentReviewTokenSource = undefined;
+      }
+      tokenSource.dispose();
     }
+  }
+
+  /**
+   * Phase 2: send a standalone conversion request (no conversation history) and return
+   * a parsed ReviewItem array, or null if conversion or parsing fails.
+   * Using a standalone message keeps the token payload small and avoids unbounded output.
+   */
+  private async _convertToStructuredItems(
+    reviewText: string,
+    model: vscode.LanguageModelChat,
+    token: vscode.CancellationToken,
+  ): Promise<Array<{ viewpoint: string; level: string; content: string }> | null> {
+    try {
+      const phase2Messages = [
+        vscode.LanguageModelChatMessage.User(`${JSON_CONVERSION_PROMPT}\n\n校閲結果:\n${reviewText}`),
+      ];
+      const response = await model.sendRequest(phase2Messages, {}, token);
+      let raw = "";
+      for await (const chunk of response.text) {
+        raw += chunk;
+      }
+      this._log(`[convertToStructuredItems] raw response length=${raw.length}`);
+      return this._parseItems(raw);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this._log(`[convertToStructuredItems] error: ${message}`);
+      return null;
+    }
+  }
+
+  /** Parse a JSON array of review items from raw LLM output. */
+  private _parseItems(raw: string): Array<{ viewpoint: string; level: string; content: string }> | null {
+    const start = raw.indexOf("[");
+    const end = raw.lastIndexOf("]");
+    if (start === -1 || end === -1 || end < start) {
+      return null;
+    }
+    try {
+      const parsed: unknown = JSON.parse(raw.slice(start, end + 1));
+      if (
+        Array.isArray(parsed) &&
+        parsed.every(
+          (item) =>
+            typeof item === "object" &&
+            item !== null &&
+            typeof (item as Record<string, unknown>).viewpoint === "string" &&
+            typeof (item as Record<string, unknown>).level === "string" &&
+            typeof (item as Record<string, unknown>).content === "string",
+        )
+      ) {
+        return parsed as Array<{ viewpoint: string; level: string; content: string }>;
+      }
+    } catch {
+      // fall through
+    }
+    return null;
   }
 
   private _buildHtml(webview: vscode.Webview, context: vscode.ExtensionContext): string {
