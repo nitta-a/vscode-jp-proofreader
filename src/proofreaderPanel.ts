@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import * as crypto from "node:crypto";
 import * as http from "node:http";
 import * as https from "node:https";
-import { DEFAULT_SYSTEM_PROMPT, SYSTEM_PROMPT_KEY } from "./constants.js";
+import { DEFAULT_SYSTEM_PROMPT, JSON_CONVERSION_PROMPT, SYSTEM_PROMPT_KEY } from "./constants.js";
 
 /**
  * Singleton WebviewPanel that hosts the JP Proofreader UI.
@@ -201,15 +201,19 @@ export class ProofreaderPanel {
         return;
       }
       this._log(`[runReview] model found: "${model.id}" (${model.family}). sending request…`);
+
+      // Phase 1: Stream the review using the user's system prompt.
       const systemPrompt = this._context.globalState.get<string>(SYSTEM_PROMPT_KEY) ?? DEFAULT_SYSTEM_PROMPT;
-      const prompt = `${systemPrompt}\n\nテキスト:\n${text}`;
-      const messages = [vscode.LanguageModelChatMessage.User(prompt)];
-      const response = await model.sendRequest(messages, {}, tokenSource.token);
+      const phase1Prompt = `${systemPrompt}\n\nテキスト:\n${text}`;
+      const phase1Messages = [vscode.LanguageModelChatMessage.User(phase1Prompt)];
+      const response = await model.sendRequest(phase1Messages, {}, tokenSource.token);
       let chunkCount = 0;
       let totalLength = 0;
+      let fullReviewText = "";
       for await (const chunk of response.text) {
         chunkCount++;
         totalLength += chunk.length;
+        fullReviewText += chunk;
         this._log(`[runReview] chunk #${chunkCount} length=${chunk.length}`);
         void this._panel.webview.postMessage({ type: "reviewChunk", chunk });
       }
@@ -221,12 +225,75 @@ export class ProofreaderPanel {
         });
         return;
       }
-      void this._panel.webview.postMessage({ type: "reviewDone" });
+
+      // Phase 2: Convert the review text to a structured JSON array.
+      this._log("[runReview] phase 2: converting to structured JSON…");
+      const items = await this._convertToStructuredItems(phase1Messages, fullReviewText, model, tokenSource.token);
+      this._log(`[runReview] phase 2 done. items=${items ? items.length : "null"}`);
+      void this._panel.webview.postMessage({ type: "reviewDone", items: items ?? undefined });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this._log(`[runReview] error: ${message}`);
       void this._panel.webview.postMessage({ type: "reviewError", message });
     }
+  }
+
+  /**
+   * Phase 2: send a conversion request with the full conversation history and return
+   * a parsed ReviewItem array, or null if conversion or parsing fails.
+   */
+  private async _convertToStructuredItems(
+    phase1Messages: vscode.LanguageModelChatMessage[],
+    assistantResponse: string,
+    model: vscode.LanguageModelChat,
+    token: vscode.CancellationToken,
+  ): Promise<Array<{ viewpoint: string; level: string; content: string }> | null> {
+    try {
+      const phase2Messages = [
+        ...phase1Messages,
+        vscode.LanguageModelChatMessage.Assistant(assistantResponse),
+        vscode.LanguageModelChatMessage.User(JSON_CONVERSION_PROMPT),
+      ];
+      const response = await model.sendRequest(phase2Messages, {}, token);
+      let raw = "";
+      for await (const chunk of response.text) {
+        raw += chunk;
+      }
+      this._log(`[convertToStructuredItems] raw response length=${raw.length}`);
+      return this._parseItems(raw);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this._log(`[convertToStructuredItems] error: ${message}`);
+      return null;
+    }
+  }
+
+  /** Parse a JSON array of review items from raw LLM output. */
+  private _parseItems(raw: string): Array<{ viewpoint: string; level: string; content: string }> | null {
+    const start = raw.indexOf("[");
+    const end = raw.lastIndexOf("]");
+    if (start === -1 || end === -1 || end < start) {
+      return null;
+    }
+    try {
+      const parsed: unknown = JSON.parse(raw.slice(start, end + 1));
+      if (
+        Array.isArray(parsed) &&
+        parsed.every(
+          (item) =>
+            typeof item === "object" &&
+            item !== null &&
+            typeof (item as Record<string, unknown>).viewpoint === "string" &&
+            typeof (item as Record<string, unknown>).level === "string" &&
+            typeof (item as Record<string, unknown>).content === "string",
+        )
+      ) {
+        return parsed as Array<{ viewpoint: string; level: string; content: string }>;
+      }
+    } catch {
+      // fall through
+    }
+    return null;
   }
 
   private _buildHtml(webview: vscode.Webview, context: vscode.ExtensionContext): string {

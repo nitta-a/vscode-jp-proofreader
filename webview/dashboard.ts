@@ -106,9 +106,9 @@ class JpProofreaderApp extends LitElement {
       console.log(`[JP Proofreader] reviewChunk length=${msg.chunk.length}`);
       this._result += msg.chunk;
     } else if (msg.type === "reviewDone") {
-      console.log(`[JP Proofreader] reviewDone. resultLength=${this._result.length}`);
+      console.log(`[JP Proofreader] reviewDone. resultLength=${this._result.length} hasItems=${!!msg.items}`);
       this._loading = false;
-      this._reviewItems = this._parseReviewItems(this._result);
+      this._reviewItems = msg.items ?? this._parseReviewItems(this._result);
     } else if (msg.type === "reviewError") {
       console.error(`[JP Proofreader] reviewError: ${msg.message}`);
       this._loading = false;
