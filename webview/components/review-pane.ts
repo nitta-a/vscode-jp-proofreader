@@ -409,11 +409,11 @@ export class JpReviewPane extends LitElement {
       this._searchIndex = 0;
     }
     void this.updateComplete.then(() => {
-      this._scrollToCurrentMatch();
+      this._scrollToCurrentMatch(false);
     });
   }
 
-  private _scrollToCurrentMatch(): void {
+  private _scrollToCurrentMatch(focusTextarea = true): void {
     if (this._searchMatches.length === 0) {
       return;
     }
@@ -423,9 +423,12 @@ export class JpReviewPane extends LitElement {
     if (!textarea) {
       return;
     }
-    // Focus the textarea so the selection highlight is visible.
-    textarea.focus({ preventScroll: true });
-    // Set the selection (highlighted via ::selection CSS).
+    // Only focus the textarea (to show ::selection highlight) on explicit navigation,
+    // not while the user is actively typing in the search input.
+    if (focusTextarea) {
+      textarea.focus({ preventScroll: true });
+    }
+    // Set the selection (highlighted via ::selection CSS when textarea is focused).
     textarea.setSelectionRange(match.start, match.end);
     // Scroll the textarea so the match is visible.
     const linesBefore = this._inputText.slice(0, match.start).split("\n").length - 1;
