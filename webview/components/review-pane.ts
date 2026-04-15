@@ -43,6 +43,10 @@ export class JpReviewPane extends LitElement {
   @state() private _modelId = "";
   @state() private _validationError = "";
   @state() private _urlInput = "";
+  @state() private _searchVisible = false;
+  @state() private _searchQuery = "";
+  @state() private _searchIndex = 0;
+  @state() private _searchMatches: Array<{ start: number; end: number }> = [];
 
   override willUpdate(changed: Map<PropertyKey, unknown>): void {
     // Set default model when models first arrive — prefer gpt-4o.
@@ -55,6 +59,12 @@ export class JpReviewPane extends LitElement {
     // Apply text fetched from URL into the textarea.
     if (changed.has("urlText") && this.urlText) {
       this._inputText = this.urlText;
+    }
+    // Re-compute search matches when the input text changes while search is active.
+    if (changed.has("_inputText") && this._searchVisible && this._searchQuery) {
+      void this.updateComplete.then(() => {
+        this._computeMatches();
+      });
     }
   }
 
@@ -261,6 +271,79 @@ export class JpReviewPane extends LitElement {
     .label {
       font-weight: 600;
     }
+
+    .pane-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .search-toggle-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      opacity: 0.5;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 13px;
+      color: inherit;
+      line-height: 1;
+    }
+    .search-toggle-btn:hover {
+      opacity: 1;
+      background: var(--sl-color-neutral-100, rgba(128, 128, 128, 0.15));
+    }
+
+    .search-bar {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+      background: var(--sl-input-background-color);
+      border: 1px solid var(--sl-input-border-color);
+      border-radius: var(--sl-border-radius-medium, 4px);
+      padding: 4px 8px;
+    }
+    .search-bar input {
+      flex: 1;
+      min-width: 0;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--sl-input-color, inherit);
+      font-size: 13px;
+      font-family: inherit;
+    }
+    .search-count {
+      font-size: 12px;
+      opacity: 0.6;
+      white-space: nowrap;
+      min-width: 44px;
+      text-align: right;
+    }
+    .search-nav-btn,
+    .search-close-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      opacity: 0.6;
+      padding: 2px 5px;
+      border-radius: 3px;
+      font-size: 11px;
+      color: inherit;
+      flex-shrink: 0;
+      line-height: 1;
+    }
+    .search-nav-btn:hover,
+    .search-close-btn:hover {
+      opacity: 1;
+      background: var(--sl-color-neutral-100, rgba(128, 128, 128, 0.15));
+    }
+    .search-nav-btn:disabled {
+      opacity: 0.25;
+      cursor: not-allowed;
+    }
   `;
 
   private _groupByViewpoint(): Map<string, ReviewItem[]> {
@@ -280,6 +363,78 @@ export class JpReviewPane extends LitElement {
     if (items.some((i) => i.level === "error")) return "error";
     if (items.some((i) => i.level === "suggestion")) return "suggestion";
     return "ok";
+  }
+
+  private _openSearch(): void {
+    this._searchVisible = true;
+    void this.updateComplete.then(() => {
+      (this.shadowRoot?.querySelector(".search-input") as HTMLInputElement | null)?.focus();
+    });
+  }
+
+  private _closeSearch(): void {
+    this._searchVisible = false;
+    this._searchQuery = "";
+    this._searchMatches = [];
+    this._searchIndex = 0;
+    void this.updateComplete.then(() => {
+      (this.shadowRoot?.querySelector("sl-textarea") as SlTextarea | null)?.focus();
+    });
+  }
+
+  private _computeMatches(): void {
+    if (!this._searchQuery) {
+      this._searchMatches = [];
+      this._searchIndex = 0;
+      return;
+    }
+    const queryLower = this._searchQuery.toLowerCase();
+    const textLower = this._inputText.toLowerCase();
+    const matches: Array<{ start: number; end: number }> = [];
+    let from = 0;
+    while (from < textLower.length) {
+      const idx = textLower.indexOf(queryLower, from);
+      if (idx === -1) {
+        break;
+      }
+      matches.push({ start: idx, end: idx + this._searchQuery.length });
+      from = idx + 1;
+    }
+    this._searchMatches = matches;
+    if (this._searchIndex >= matches.length) {
+      this._searchIndex = 0;
+    }
+    void this.updateComplete.then(() => {
+      this._scrollToCurrentMatch();
+    });
+  }
+
+  private _scrollToCurrentMatch(): void {
+    if (this._searchMatches.length === 0) {
+      return;
+    }
+    const match = this._searchMatches[this._searchIndex];
+    const slTextarea = this.shadowRoot?.querySelector("sl-textarea") as SlTextarea | null;
+    const textarea = slTextarea?.input;
+    if (!textarea) {
+      return;
+    }
+    // Set the selection (will be visible when the textarea gains focus).
+    textarea.setSelectionRange(match.start, match.end);
+    // Scroll the textarea so the match is visible.
+    const linesBefore = this._inputText.slice(0, match.start).split("\n").length - 1;
+    const defaultLineHeight = 20;
+    const lineHeight = Number.parseFloat(window.getComputedStyle(textarea).lineHeight) || defaultLineHeight;
+    textarea.scrollTop = Math.max(0, linesBefore * lineHeight - textarea.clientHeight / 3);
+  }
+
+  private _navigateMatch(delta: number): void {
+    if (this._searchMatches.length === 0) {
+      return;
+    }
+    const len = this._searchMatches.length;
+    this._searchIndex = ((this._searchIndex + delta) % len + len) % len;
+    this._scrollToCurrentMatch();
   }
 
   private _loadUrl = (): void => {
@@ -323,7 +478,10 @@ export class JpReviewPane extends LitElement {
     return html`
       <sl-split-panel>
         <div slot="start" class="pane">
-          <p class="pane-label">テキスト入力</p>
+          <div class="pane-header">
+            <p class="pane-label">テキスト入力</p>
+            <button class="search-toggle-btn" title="検索 (Ctrl+F)" @click=${this._openSearch}>🔍</button>
+          </div>
           <div class="url-row">
             <sl-input
               placeholder="URLを入力して読み込む (例: https://example.com/article)"
@@ -342,11 +500,65 @@ export class JpReviewPane extends LitElement {
               @click=${this._loadUrl}
             >読み込み</sl-button>
           </div>
+          ${this._searchVisible
+            ? html`
+                <div class="search-bar">
+                  <input
+                    class="search-input"
+                    type="text"
+                    placeholder="検索..."
+                    .value=${this._searchQuery}
+                    @input=${(e: InputEvent) => {
+                      this._searchQuery = (e.target as HTMLInputElement).value;
+                      this._computeMatches();
+                    }}
+                    @keydown=${(e: KeyboardEvent) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        this._navigateMatch(e.shiftKey ? -1 : 1);
+                      } else if (e.key === "Escape") {
+                        this._closeSearch();
+                      }
+                    }}
+                  />
+                  <span class="search-count">
+                    ${this._searchQuery
+                      ? this._searchMatches.length > 0
+                        ? `${this._searchIndex + 1} / ${this._searchMatches.length}`
+                        : "0 件"
+                      : ""}
+                  </span>
+                  <button
+                    class="search-nav-btn"
+                    title="前へ (Shift+Enter)"
+                    ?disabled=${this._searchMatches.length === 0}
+                    @click=${() => this._navigateMatch(-1)}
+                  >
+                    ▲
+                  </button>
+                  <button
+                    class="search-nav-btn"
+                    title="次へ (Enter)"
+                    ?disabled=${this._searchMatches.length === 0}
+                    @click=${() => this._navigateMatch(1)}
+                  >
+                    ▼
+                  </button>
+                  <button class="search-close-btn" title="閉じる (Esc)" @click=${this._closeSearch}>✕</button>
+                </div>
+              `
+            : nothing}
           <sl-textarea
             placeholder="校閲したいテキストを入力してください…"
             .value=${this._inputText}
             @sl-input=${(e: CustomEvent) => {
               this._inputText = (e.target as SlTextarea).value;
+            }}
+            @keydown=${(e: KeyboardEvent) => {
+              if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+                e.preventDefault();
+                this._openSearch();
+              }
             }}
           ></sl-textarea>
         </div>
