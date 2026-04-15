@@ -21,7 +21,12 @@ import { customElement, state } from "lit/decorators.js";
 // Child components
 import "./components/review-pane";
 import "./components/settings-pane";
-import type { FetchUrlDetail, FocusItemDetail, ReviewRequestDetail } from "./components/review-pane";
+import type {
+  FetchUrlDetail,
+  FocusItemDetail,
+  ReviewRequestDetail,
+  SaveReviewMarkdownDetail,
+} from "./components/review-pane";
 import type { SavePromptToFileDetail, SaveSettingsDetail, UpdateCustomRulesDetail } from "./components/settings-pane";
 // Shared API singleton and types
 import { type HostMsg, type ModelInfo, type ReviewItem, vscode } from "./vscode-api";
@@ -169,6 +174,10 @@ class JpProofreaderApp extends LitElement {
     vscode.postMessage({ type: "review", text: e.detail.text, modelId: e.detail.modelId });
   };
 
+  private _handleSaveReviewMarkdown = (e: CustomEvent<SaveReviewMarkdownDetail>): void => {
+    vscode.postMessage({ type: "saveReviewMarkdown", items: e.detail.items, modelId: e.detail.modelId });
+  };
+
   private _parseReviewItems(raw: string): ReviewItem[] | null {
     // Extract the JSON array, handling optional ```json...``` wrappers and
     // any explanatory text the LLM may emit before or after the array.
@@ -234,6 +243,7 @@ class JpProofreaderApp extends LitElement {
             @jp-review=${this._handleReview}
             @jp-fetch-url=${this._handleFetchUrl}
             @focus-item=${this._handleFocusItem}
+            @save-review-markdown=${this._handleSaveReviewMarkdown}
           ></jp-review-pane>
         </sl-tab-panel>
 

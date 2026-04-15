@@ -24,6 +24,7 @@ import type { ModelInfo, ReviewItem } from "../vscode-api";
 export type ReviewRequestDetail = { text: string; modelId: string };
 export type FetchUrlDetail = { url: string };
 export type FocusItemDetail = { line: number; targetText: string };
+export type SaveReviewMarkdownDetail = { items: ReviewItem[]; modelId: string };
 
 @customElement("jp-review-pane")
 export class JpReviewPane extends LitElement {
@@ -570,6 +571,19 @@ export class JpReviewPane extends LitElement {
     );
   };
 
+  private _saveReviewMarkdown = (): void => {
+    if (!this.reviewItems || this.reviewItems.length === 0 || !this._modelId) {
+      return;
+    }
+    this.dispatchEvent(
+      new CustomEvent<SaveReviewMarkdownDetail>("save-review-markdown", {
+        detail: { items: this.reviewItems, modelId: this._modelId },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  };
+
   override render() {
     const showPlaceholder = !this.result && !this.loading && this.reviewItems === null;
     const showLoading = this.loading && !this.result;
@@ -689,6 +703,14 @@ export class JpReviewPane extends LitElement {
           >
             <sl-icon slot="prefix" name="stars"></sl-icon>
             Copilotレビュー
+          </sl-button>
+
+          <sl-button
+            variant="default"
+            ?disabled=${this.loading || (this.reviewItems?.length ?? 0) === 0}
+            @click=${this._saveReviewMarkdown}
+          >
+            結果を保存 (.md)
           </sl-button>
 
           ${displayError ? html`<p class="error-msg">${displayError}</p>` : nothing}

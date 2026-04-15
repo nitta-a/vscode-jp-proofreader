@@ -102,6 +102,7 @@ export class ProofreaderPanel {
         type: string;
         text?: string;
         modelId?: string;
+        items?: ReviewItem[];
         systemPrompt?: string;
         url?: string;
         targetText?: string;
@@ -136,6 +137,8 @@ export class ProofreaderPanel {
           void this._loadPromptFromFile();
         } else if (msg.type === "fetchUrl" && typeof msg.url === "string") {
           void this._fetchUrl(msg.url);
+        } else if (msg.type === "saveReviewMarkdown" && Array.isArray(msg.items) && typeof msg.modelId === "string") {
+          void this._saveReviewMarkdown(msg.items, msg.modelId);
         } else if (msg.type === "focusText") {
           this._log(
             `[focusText] received: line=${JSON.stringify(msg.line)} (type=${typeof msg.line}) targetText=${JSON.stringify(msg.targetText)}`,
@@ -349,6 +352,98 @@ export class ProofreaderPanel {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       void this._panel.webview.postMessage({ type: "promptFileError", message: `読み込みエラー: ${message}` });
+    }
+  }
+
+  private _toDateString(now: Date): string {
+    return now.toISOString().slice(0, 10).replace(/-/g, "");
+  }
+
+  private _escapeMarkdown(value: string): string {
+    return value.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\r?\n/g, "<br>");
+  }
+
+  private _buildReviewMarkdown(items: ReviewItem[], modelId: string, sourceFileName: string, executedAt: Date): string {
+    const countsByViewpoint = new Map<string, { total: number; error: number; suggestion: number; ok: number }>();
+    for (const item of items) {
+      const current = countsByViewpoint.get(item.viewpoint) ?? {
+        total: 0,
+        error: 0,
+        suggestion: 0,
+        ok: 0,
+      };
+      current.total += 1;
+      if (item.level === "error" || item.level === "suggestion" || item.level === "ok") {
+        current[item.level] += 1;
+      }
+      countsByViewpoint.set(item.viewpoint, current);
+    }
+
+    const summaryRows =
+      countsByViewpoint.size === 0
+        ? ["| - | 0 | 0 | 0 | 0 |"]
+        : Array.from(countsByViewpoint.entries()).map(([viewpoint, stats]) => {
+            return `| ${this._escapeMarkdown(viewpoint)} | ${stats.total} | ${stats.error} | ${stats.suggestion} | ${stats.ok} |`;
+          });
+
+    const detailRows =
+      items.length === 0
+        ? ["| - | - | - | - | - | - | - |"]
+        : items.map((item) => {
+            const line = item.line > 0 ? String(item.line) : "-";
+            return `| ${line} | ${this._escapeMarkdown(item.viewpoint)} | ${this._escapeMarkdown(item.level)} | ${this._escapeMarkdown(item.targetText)} | ${this._escapeMarkdown(item.replacementText)} | ${this._escapeMarkdown(item.content)} |`;
+          });
+
+    return [
+      "# 校閲結果",
+      "",
+      "## メタ情報",
+      `- 実行日時: ${executedAt.toISOString()}`,
+      `- 対象ファイル名: ${sourceFileName}`,
+      `- 使用モデル: ${modelId}`,
+      "",
+      "## 観点別サマリー",
+      "",
+      "| 観点 | 件数 | error | suggestion | ok |",
+      "| --- | ---: | ---: | ---: | ---: |",
+      ...summaryRows,
+      "",
+      "## 指摘事項",
+      "",
+      "| 行番号 | 観点 | レベル | 元のテキスト | 修正案 | 指摘内容 |",
+      "| ---: | --- | --- | --- | --- | --- |",
+      ...detailRows,
+      "",
+    ].join("\n");
+  }
+
+  private async _saveReviewMarkdown(items: ReviewItem[], modelId: string): Promise<void> {
+    const editor = this._resolveEditor();
+    const docUri = editor?.document.uri;
+    const parsedPath = docUri?.scheme === "file" ? path.parse(docUri.fsPath) : undefined;
+    const sourceFileName = parsedPath?.base || editor?.document.fileName || "untitled";
+    const dateString = this._toDateString(new Date());
+    const defaultFileName = `${parsedPath?.name || "untitled"}_校閲結果_${dateString}.md`;
+    const defaultDir =
+      parsedPath?.dir || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || this._context.globalStorageUri.fsPath;
+    const defaultUri = vscode.Uri.file(path.join(defaultDir, defaultFileName));
+    const saveUri = await vscode.window.showSaveDialog({
+      defaultUri,
+      filters: { Markdown: ["md"] },
+      saveLabel: "校閲結果を保存",
+      title: "校閲結果をMarkdownとして保存",
+    });
+    if (!saveUri) {
+      return;
+    }
+    try {
+      const markdown = this._buildReviewMarkdown(items, modelId, sourceFileName, new Date());
+      await vscode.workspace.fs.writeFile(saveUri, new TextEncoder().encode(markdown));
+      void vscode.window.showInformationMessage(`校閲結果を保存しました: ${saveUri.fsPath}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this._log(`[saveReviewMarkdown] error: ${message}`);
+      void vscode.window.showErrorMessage(`校閲結果の保存に失敗しました: ${message}`);
     }
   }
 

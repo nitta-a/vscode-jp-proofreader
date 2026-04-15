@@ -39,6 +39,7 @@ export type HostMsg =
 type WebviewToHostMsg =
   | { type: "requestModels" }
   | { type: "review"; text: string; modelId: string }
+  | { type: "saveReviewMarkdown"; items: ReviewItem[]; modelId: string }
   | { type: "getSettings" }
   | { type: "setSettings"; systemPrompt: string }
   | { type: "updateSettings"; customRules: string }
