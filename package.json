@@ -35,12 +35,18 @@
     "views": {
       "jp-proofreader-container": [
         {
-          "type": "webview",
+          "type": "tree",
           "id": "jp-proofreader-view",
           "name": "JP Proofreader"
         }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "jp-proofreader-view",
+        "contents": "JP Proofreaderを使用して、現在のドキュメントの校閲を開始します。\n[校閲を開始する](command:jp-proofreader.check)"
+      }
+    ],
     "chatParticipants": [
       {
         "id": "jp-proofreader.proofreader",

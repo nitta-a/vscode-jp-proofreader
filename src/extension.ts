@@ -2,7 +2,6 @@ import * as vscode from "vscode";
 import { ProofreaderCodeActionProvider } from "./codeActionProvider.js";
 import { DEFAULT_SYSTEM_PROMPT, DIAGNOSTIC_SOURCE, SYSTEM_PROMPT_KEY } from "./constants.js";
 import { ProofreaderPanel } from "./proofreaderPanel.js";
-import { ProofreaderViewProvider } from "./viewProvider.js";
 
 export function activate(context: vscode.ExtensionContext): void {
   // DiagnosticCollection for editor wave-underline annotations
@@ -13,14 +12,6 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.languages.registerCodeActionsProvider("*", new ProofreaderCodeActionProvider(), {
       providedCodeActionKinds: [vscode.CodeActionKind.QuickFix],
-    }),
-  );
-
-  // Sidebar view (activity bar icon → WebviewView)
-  const viewProvider = new ProofreaderViewProvider(context, diagnosticCollection);
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider("jp-proofreader-view", viewProvider, {
-      webviewOptions: { retainContextWhenHidden: true },
     }),
   );
 
