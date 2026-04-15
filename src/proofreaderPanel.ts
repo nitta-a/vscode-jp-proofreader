@@ -77,7 +77,6 @@ export class ProofreaderPanel {
         url?: string;
         targetText?: string;
         customRules?: string;
-        url?: string;
       }) => {
         this._log(`[webview→host] type="${msg.type}"`);
         if (msg.type === "requestModels") {
