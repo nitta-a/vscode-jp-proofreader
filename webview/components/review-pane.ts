@@ -22,7 +22,7 @@ import type { ModelInfo, ReviewItem } from "../vscode-api";
 
 export type ReviewRequestDetail = { text: string; modelId: string };
 export type FetchUrlDetail = { url: string };
-export type FocusItemDetail = { targetText: string };
+export type FocusItemDetail = { line: number };
 
 @customElement("jp-review-pane")
 export class JpReviewPane extends LitElement {
@@ -635,17 +635,17 @@ export class JpReviewPane extends LitElement {
                                       </p>`
                                     : nothing}
                                 </div>
-                                ${item.targetText
+                                ${item.line > 0
                                   ? html`<sl-icon-button
                                       class="item-focus-btn"
                                       name="crosshair"
                                       title="エディタで該当箇所を表示"
                                       @click=${() => {
-                                        const targetText = item.targetText;
-                                        if (!targetText) return;
+                                        const line = item.line;
+                                        if (!line) return;
                                         this.dispatchEvent(
                                           new CustomEvent<FocusItemDetail>("focus-item", {
-                                            detail: { targetText },
+                                            detail: { line },
                                             bubbles: true,
                                             composed: true,
                                           }),

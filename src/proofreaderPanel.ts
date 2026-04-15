@@ -97,6 +97,7 @@ export class ProofreaderPanel {
         systemPrompt?: string;
         url?: string;
         targetText?: string;
+        line?: number;
         customRules?: string;
       }) => {
         this._log(`[webview→host] type="${msg.type}"`);
@@ -127,8 +128,8 @@ export class ProofreaderPanel {
           void this._loadPromptFromFile();
         } else if (msg.type === "fetchUrl" && typeof msg.url === "string") {
           void this._fetchUrl(msg.url);
-        } else if (msg.type === "focusText" && typeof msg.targetText === "string") {
-          this._focusTextInEditor(msg.targetText);
+        } else if (msg.type === "focusText" && typeof msg.line === "number") {
+          this._focusLineInEditor(msg.line);
         }
       },
       undefined,
@@ -138,70 +139,26 @@ export class ProofreaderPanel {
     this._panel.onDidDispose(() => this._disposePanel(), undefined, this._disposables);
   }
 
-  /**
-   * Fuzzy-match `targetText` against the document, absorbing whitespace/newline differences.
-   * Special regex characters in the target are escaped, then each run of whitespace is
-   * replaced with `\s+` so minor spacing or line-break differences are tolerated.
-   */
-  private _findFuzzyTextRange(document: vscode.TextDocument, targetText: string): vscode.Range | null {
-    const escaped = targetText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const pattern = escaped.replace(/\s+/g, "\\s+");
-    const regex = new RegExp(pattern);
-    const docText = document.getText();
-    const match = regex.exec(docText);
-    if (!match || match.index === undefined) {
-      return null;
-    }
-    const start = document.positionAt(match.index);
-    const end = document.positionAt(match.index + match[0].length);
-    return new vscode.Range(start, end);
-  }
-
-  private _focusTextInEditor(targetText: string): void {
-    this._log(`[focusText] targetText="${targetText}"`);
-
-    // Search the last active editor first, then fall back to all open documents.
-    const candidates: vscode.TextDocument[] = [];
-    const lastDoc = (vscode.window.activeTextEditor ?? this._lastActiveEditor)?.document;
-    if (lastDoc) {
-      candidates.push(lastDoc);
-    }
-    for (const doc of vscode.workspace.textDocuments) {
-      const scheme = doc.uri.scheme;
-      if ((scheme === "file" || scheme === "untitled") && doc !== lastDoc) {
-        candidates.push(doc);
-      }
-    }
-
-    this._log(`[focusText] searching ${candidates.length} document(s)`);
-
-    let found: { doc: vscode.TextDocument; range: vscode.Range } | undefined;
-    for (const doc of candidates) {
-      const range = this._findFuzzyTextRange(doc, targetText);
-      this._log(`[focusText] checked "${doc.fileName}" → found=${range !== null}`);
-      if (range) {
-        found = { doc, range };
-        break;
-      }
-    }
-
-    if (!found) {
-      this._log("[focusText] targetText not found in any open document");
+  private _focusLineInEditor(line: number): void {
+    this._log(`[focusText] line=${line}`);
+    const editor = vscode.window.activeTextEditor ?? this._lastActiveEditor;
+    if (!editor) {
+      this._log("[focusText] no active editor");
       void vscode.window.showInformationMessage(
-        "JP Proofreader: 文字列の特定に失敗しました（改行や空白の差異が原因の可能性があります）",
+        "JP Proofreader: 文字列の特定に失敗しました（アクティブなエディタが見つかりません）",
       );
       return;
     }
-
-    const { doc, range } = found;
-    this._log(
-      `[focusText] found in "${doc.fileName}" at ${range.start.line}:${range.start.character}–${range.end.line}:${range.end.character}`,
-    );
-
-    void vscode.window.showTextDocument(doc, { preserveFocus: false }).then((editor) => {
-      editor.selection = new vscode.Selection(range.start, range.end);
-      editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
-    });
+    const lineIndex = line - 1;
+    if (lineIndex < 0 || lineIndex >= editor.document.lineCount) {
+      this._log(`[focusText] line ${line} out of range (document has ${editor.document.lineCount} lines)`);
+      void vscode.window.showInformationMessage("JP Proofreader: 文字列の特定に失敗しました（行番号が範囲外です）");
+      return;
+    }
+    const range = editor.document.lineAt(lineIndex).range;
+    this._log(`[focusText] focusing line ${line} in "${editor.document.fileName}"`);
+    editor.selection = new vscode.Selection(range.start, range.end);
+    editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
   }
 
   private _sendSettings(): void {
@@ -557,6 +514,7 @@ export class ProofreaderPanel {
     content: string;
     targetText: string;
     replacementText: string;
+    line: number;
   }> | null> {
     try {
       const phase2Messages = [
@@ -577,9 +535,14 @@ export class ProofreaderPanel {
   }
 
   /** Parse a JSON array of review items from raw LLM output. */
-  private _parseItems(
-    raw: string,
-  ): Array<{ viewpoint: string; level: string; content: string; targetText: string; replacementText: string }> | null {
+  private _parseItems(raw: string): Array<{
+    viewpoint: string;
+    level: string;
+    content: string;
+    targetText: string;
+    replacementText: string;
+    line: number;
+  }> | null {
     const start = raw.indexOf("[");
     const end = raw.lastIndexOf("]");
     if (start === -1 || end === -1 || end < start) {
@@ -600,13 +563,14 @@ export class ProofreaderPanel {
             typeof (item as Record<string, unknown>).replacementText === "string",
         )
       ) {
-        return parsed as Array<{
-          viewpoint: string;
-          level: string;
-          content: string;
-          targetText: string;
-          replacementText: string;
-        }>;
+        return (parsed as Array<Record<string, unknown>>).map((item) => ({
+          viewpoint: item.viewpoint as string,
+          level: item.level as string,
+          content: item.content as string,
+          targetText: item.targetText as string,
+          replacementText: item.replacementText as string,
+          line: typeof item.line === "number" ? (item.line as number) : 0,
+        }));
       }
     } catch {
       // fall through
@@ -620,7 +584,14 @@ export class ProofreaderPanel {
    * attaches a Diagnostic at that location.
    */
   private _setDiagnostics(
-    items: Array<{ viewpoint: string; level: string; content: string; targetText: string; replacementText: string }>,
+    items: Array<{
+      viewpoint: string;
+      level: string;
+      content: string;
+      targetText: string;
+      replacementText: string;
+      line: number;
+    }>,
   ): void {
     if (!this._diagnosticCollection) {
       return;

@@ -15,6 +15,7 @@ export type ReviewItem = {
   content: string;
   targetText: string;
   replacementText: string;
+  line: number;
 };
 
 export type HostMsg =
@@ -38,7 +39,7 @@ type WebviewToHostMsg =
   | { type: "savePromptToFile"; systemPrompt: string }
   | { type: "loadPromptFromFile" }
   | { type: "fetchUrl"; url: string }
-  | { type: "focusText"; targetText: string };
+  | { type: "focusText"; line: number };
 
 // ---------------------------------------------------------------------------
 // Singleton
