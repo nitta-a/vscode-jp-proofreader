@@ -437,9 +437,11 @@ export class ProofreaderPanel {
           // Open the cleaned text in an untitled editor so that the Focus
           // feature can locate targetText in a VS Code document.  Using
           // preserveFocus keeps the webview panel in the foreground.
-          void vscode.workspace
-            .openTextDocument({ content: text, language: "plaintext" })
-            .then((doc) => vscode.window.showTextDocument(doc, { preserveFocus: true }));
+          void Promise.resolve(
+            vscode.workspace
+              .openTextDocument({ content: text, language: "plaintext" })
+              .then((doc) => vscode.window.showTextDocument(doc, { preserveFocus: true })),
+          ).catch((err: Error) => this._log(`[fetchUrl] failed to open untitled editor: ${err.message}`));
           void this._panel.webview.postMessage({ type: "urlContent", text });
           resolve();
         });
