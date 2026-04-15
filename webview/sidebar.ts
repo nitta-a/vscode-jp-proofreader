@@ -6,6 +6,7 @@
 import "@shoelace-style/shoelace/dist/themes/dark.css";
 import "@shoelace-style/shoelace/dist/themes/light.css";
 // Shoelace components used in this view
+import "@shoelace-style/shoelace/dist/components/button/button.js";
 import "@shoelace-style/shoelace/dist/components/textarea/textarea.js";
 import type SlTextarea from "@shoelace-style/shoelace/dist/components/textarea/textarea.js";
 import { setBasePath } from "@shoelace-style/shoelace/dist/utilities/base-path.js";
@@ -51,6 +52,15 @@ class JpSidebarApp extends LitElement {
       box-sizing: border-box;
     }
 
+    .start-button {
+      flex-shrink: 0;
+    }
+
+    sl-button[variant="primary"]::part(base) {
+      width: 100%;
+      justify-content: center;
+    }
+
     sl-textarea {
       width: 100%;
       flex: 1;
@@ -83,6 +93,10 @@ class JpSidebarApp extends LitElement {
     }
   };
 
+  private _handleStartCheck = (): void => {
+    sidebarVscode.postMessage({ type: "executeCommand", command: "jp-proofreader.check" });
+  };
+
   private _handleChange = (e: Event): void => {
     const value = (e.target as SlTextarea).value;
     this._customRules = value;
@@ -95,6 +109,7 @@ class JpSidebarApp extends LitElement {
     }
     return html`
       <div class="container">
+        <sl-button class="start-button" variant="primary" @click=${this._handleStartCheck}>校閲を開始する</sl-button>
         <sl-textarea
           label="プロジェクト固有ルール / 用語集"
           help-text="校閲時に最優先で適用されます"

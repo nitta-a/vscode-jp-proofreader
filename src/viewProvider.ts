@@ -23,7 +23,7 @@ export class SidebarViewProvider implements vscode.WebviewViewProvider {
     webviewView.webview.html = this._buildHtml(webviewView.webview);
 
     webviewView.webview.onDidReceiveMessage(
-      (msg: { type: string; rules?: string }) => {
+      (msg: { type: string; rules?: string; command?: string }) => {
         if (msg.type === "getSidebarData") {
           const customRules = vscode.workspace.getConfiguration("vscode-jp-proofreader").get<string>("customRules", "");
           void webviewView.webview.postMessage({ type: "sidebarData", customRules });
@@ -32,6 +32,8 @@ export class SidebarViewProvider implements vscode.WebviewViewProvider {
             ? vscode.ConfigurationTarget.Workspace
             : vscode.ConfigurationTarget.Global;
           void vscode.workspace.getConfiguration("vscode-jp-proofreader").update("customRules", msg.rules, target);
+        } else if (msg.type === "executeCommand" && typeof msg.command === "string") {
+          void vscode.commands.executeCommand(msg.command);
         }
       },
       undefined,
