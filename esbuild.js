@@ -66,16 +66,40 @@ async function main() {
     plugins: [esbuildProblemMatcherPlugin],
   });
 
+  // Separate bundle for the sidebar WebView (browser context, IIFE format).
+  const sidebarCtx = await esbuild.context({
+    entryPoints: ["webview/sidebar.ts"],
+    bundle: true,
+    format: "iife",
+    minify: production,
+    sourcemap: !production,
+    sourcesContent: false,
+    platform: "browser",
+    outfile: "dist/webview/sidebar.js",
+    logLevel: "silent",
+    jsx: "automatic",
+    tsconfigRaw: {
+      compilerOptions: {
+        experimentalDecorators: true,
+        useDefineForClassFields: false,
+      },
+    },
+    plugins: [esbuildProblemMatcherPlugin],
+  });
+
   if (watch) {
     // Copy Shoelace assets once on start, then watch for JS/CSS changes.
     await copyShoelaceAssets();
     await ctx.watch();
     await webviewCtx.watch();
+    await sidebarCtx.watch();
   } else {
     await ctx.rebuild();
     await ctx.dispose();
     await webviewCtx.rebuild();
     await webviewCtx.dispose();
+    await sidebarCtx.rebuild();
+    await sidebarCtx.dispose();
     await copyShoelaceAssets();
   }
 }

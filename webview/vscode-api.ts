@@ -41,12 +41,24 @@ type WebviewToHostMsg =
   | { type: "fetchUrl"; url: string }
   | { type: "focusText"; line: number };
 
+export type SidebarToHostMsg = { type: "getSidebarData" } | { type: "updateCustomRules"; rules: string };
+
+export type SidebarHostMsg = { type: "sidebarData"; customRules: string };
+
+export interface SidebarVsCodeApi {
+  postMessage(msg: SidebarToHostMsg): void;
+}
+
 // ---------------------------------------------------------------------------
 // Singleton
 // ---------------------------------------------------------------------------
 
 interface VsCodeApi {
   postMessage(msg: WebviewToHostMsg): void;
+}
+
+interface SidebarVsCodeApi {
+  postMessage(msg: SidebarToHostMsg): void;
 }
 
 declare function acquireVsCodeApi(): VsCodeApi;
