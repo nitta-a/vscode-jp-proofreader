@@ -150,7 +150,7 @@ class JpProofreaderApp extends LitElement {
   };
 
   private _handleFocusItem = (e: CustomEvent<FocusItemDetail>): void => {
-    vscode.postMessage({ type: "focusText", line: e.detail.line });
+    vscode.postMessage({ type: "focusText", line: e.detail.line, targetText: e.detail.targetText });
   };
 
   private _handleFetchUrl = (e: CustomEvent<FetchUrlDetail>): void => {

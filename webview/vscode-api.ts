@@ -23,7 +23,13 @@ export type HostMsg =
   | { type: "reviewChunk"; chunk: string }
   | { type: "reviewDone"; items?: ReviewItem[] }
   | { type: "reviewError"; message: string }
-  | { type: "settings"; systemPrompt: string; defaultSystemPrompt: string; promptFilePath?: string; customRules?: string }
+  | {
+      type: "settings";
+      systemPrompt: string;
+      defaultSystemPrompt: string;
+      promptFilePath?: string;
+      customRules?: string;
+    }
   | { type: "urlContent"; text: string }
   | { type: "urlError"; message: string }
   | { type: "promptFileSaved"; path: string }
@@ -39,7 +45,7 @@ type WebviewToHostMsg =
   | { type: "savePromptToFile"; systemPrompt: string }
   | { type: "loadPromptFromFile" }
   | { type: "fetchUrl"; url: string }
-  | { type: "focusText"; line: number };
+  | { type: "focusText"; line: number; targetText?: string };
 
 export type SidebarToHostMsg =
   | { type: "getSidebarData" }
@@ -47,10 +53,6 @@ export type SidebarToHostMsg =
   | { type: "executeCommand"; command: string };
 
 export type SidebarHostMsg = { type: "sidebarData"; customRules: string };
-
-export interface SidebarVsCodeApi {
-  postMessage(msg: SidebarToHostMsg): void;
-}
 
 // ---------------------------------------------------------------------------
 // Singleton
@@ -60,7 +62,7 @@ interface VsCodeApi {
   postMessage(msg: WebviewToHostMsg): void;
 }
 
-interface SidebarVsCodeApi {
+export interface SidebarVsCodeApi {
   postMessage(msg: SidebarToHostMsg): void;
 }
 

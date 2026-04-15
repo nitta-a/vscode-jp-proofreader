@@ -137,7 +137,11 @@ export class ProofreaderPanel {
         } else if (msg.type === "fetchUrl" && typeof msg.url === "string") {
           void this._fetchUrl(msg.url);
         } else if (msg.type === "focusText" && typeof msg.line === "number") {
-          this._focusLineInEditor(msg.line);
+          if (msg.line > 0) {
+            this._focusLineInEditor(msg.line);
+          } else if (typeof msg.targetText === "string" && msg.targetText) {
+            this._focusTextInEditor(msg.targetText);
+          }
         }
       },
       undefined,
@@ -147,9 +151,77 @@ export class ProofreaderPanel {
     this._panel.onDidDispose(() => this._disposePanel(), undefined, this._disposables);
   }
 
+  /**
+   * Resolve the best available text editor for focus operations.
+   * Priority: activeTextEditor → _lastActiveEditor → any visible file/untitled editor.
+   * This covers the common case where the webview panel has taken focus
+   * (activeTextEditor becomes undefined) and the user's text file is still
+   * visible in another column.
+   */
+  private _resolveEditor(): vscode.TextEditor | undefined {
+    const isText = (e: vscode.TextEditor): boolean => {
+      const s = e.document.uri.scheme;
+      return s === "file" || s === "untitled";
+    };
+    return (
+      (vscode.window.activeTextEditor && isText(vscode.window.activeTextEditor)
+        ? vscode.window.activeTextEditor
+        : undefined) ??
+      this._lastActiveEditor ??
+      vscode.window.visibleTextEditors.find(isText)
+    );
+  }
+
+  private _focusTextInEditor(targetText: string): void {
+    this._log(`[focusText] targetText="${targetText}"`);
+
+    // Helper: try to find and select targetText in a given document, then show it.
+    const tryDocument = (doc: vscode.TextDocument, preferredColumn?: vscode.ViewColumn): boolean => {
+      const text = doc.getText();
+      const offset = text.indexOf(targetText);
+      if (offset === -1) {
+        return false;
+      }
+      const start = doc.positionAt(offset);
+      const end = doc.positionAt(offset + targetText.length);
+      const selection = new vscode.Selection(start, end);
+      this._log(`[focusText] found targetText at line ${start.line + 1} in "${doc.fileName}"`);
+      void vscode.window.showTextDocument(doc, {
+        selection,
+        preserveFocus: false,
+        viewColumn: preferredColumn,
+      });
+      return true;
+    };
+
+    // First: try visible / tracked editors.
+    const editor = this._resolveEditor();
+    if (editor) {
+      if (tryDocument(editor.document, editor.viewColumn)) {
+        return;
+      }
+      // Found an editor but targetText not in it — fall through to search all documents.
+    }
+
+    // Second: search every open (possibly non-visible) text document.
+    this._log("[focusText] no matching editor visible; searching all open documents");
+    const isTextDoc = (d: vscode.TextDocument): boolean => d.uri.scheme === "file" || d.uri.scheme === "untitled";
+    for (const doc of vscode.workspace.textDocuments) {
+      if (!isTextDoc(doc)) {
+        continue;
+      }
+      if (tryDocument(doc)) {
+        return;
+      }
+    }
+
+    this._log("[focusText] targetText not found in any open document");
+    void vscode.window.showInformationMessage("JP Proofreader: 文字列がドキュメント内に見つかりませんでした");
+  }
+
   private _focusLineInEditor(line: number): void {
     this._log(`[focusText] line=${line}`);
-    const editor = vscode.window.activeTextEditor ?? this._lastActiveEditor;
+    const editor = this._resolveEditor();
     if (!editor) {
       this._log("[focusText] no active editor");
       void vscode.window.showInformationMessage(

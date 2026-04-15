@@ -22,7 +22,7 @@ import type { ModelInfo, ReviewItem } from "../vscode-api";
 
 export type ReviewRequestDetail = { text: string; modelId: string };
 export type FetchUrlDetail = { url: string };
-export type FocusItemDetail = { line: number };
+export type FocusItemDetail = { line: number; targetText: string };
 
 @customElement("jp-review-pane")
 export class JpReviewPane extends LitElement {
@@ -453,7 +453,7 @@ export class JpReviewPane extends LitElement {
       return;
     }
     const len = this._searchMatches.length;
-    this._searchIndex = ((this._searchIndex + delta) % len + len) % len;
+    this._searchIndex = (((this._searchIndex + delta) % len) + len) % len;
     this._scrollToCurrentMatch();
   }
 
@@ -520,8 +520,9 @@ export class JpReviewPane extends LitElement {
               @click=${this._loadUrl}
             >読み込み</sl-button>
           </div>
-          ${this._searchVisible
-            ? html`
+          ${
+            this._searchVisible
+              ? html`
                 <div class="search-bar">
                   <input
                     class="search-input"
@@ -542,11 +543,13 @@ export class JpReviewPane extends LitElement {
                     }}
                   />
                   <span class="search-count">
-                    ${this._searchQuery
-                      ? this._searchMatches.length > 0
-                        ? `${this._searchIndex + 1} / ${this._searchMatches.length}`
-                        : "0 件"
-                      : ""}
+                    ${
+                      this._searchQuery
+                        ? this._searchMatches.length > 0
+                          ? `${this._searchIndex + 1} / ${this._searchMatches.length}`
+                          : "0 件"
+                        : ""
+                    }
                   </span>
                   <button
                     class="search-nav-btn"
@@ -567,7 +570,8 @@ export class JpReviewPane extends LitElement {
                   <button class="search-close-btn" title="閉じる (Esc)" @click=${this._closeSearch}>✕</button>
                 </div>
               `
-            : nothing}
+              : nothing
+          }
           <sl-textarea
             placeholder="校閲したいテキストを入力してください…"
             .value=${this._inputText}
@@ -607,8 +611,9 @@ export class JpReviewPane extends LitElement {
 
           ${displayError ? html`<p class="error-msg">${displayError}</p>` : nothing}
 
-          ${showItems
-            ? html`
+          ${
+            showItems
+              ? html`
                 <div class="review-items">
                   ${Array.from(this._groupByViewpoint().entries()).map(
                     ([viewpoint, items]) => html`
@@ -624,35 +629,39 @@ export class JpReviewPane extends LitElement {
                                 <span class="level-dot ${item.level}"></span>
                                 <div class="item-body">
                                   <p class="item-content">${item.content}</p>
-                                  ${item.targetText
-                                    ? html`<p class="item-target">
+                                  ${
+                                    item.targetText
+                                      ? html`<p class="item-target">
                                         <span class="label">対象:</span> ${item.targetText}
                                       </p>`
-                                    : nothing}
-                                  ${item.replacementText
-                                    ? html`<p class="item-replacement">
+                                      : nothing
+                                  }
+                                  ${
+                                    item.replacementText
+                                      ? html`<p class="item-replacement">
                                         <span class="label">修正案:</span> ${item.replacementText}
                                       </p>`
-                                    : nothing}
+                                      : nothing
+                                  }
                                 </div>
-                                ${item.line > 0
-                                  ? html`<sl-icon-button
+                                ${
+                                  item.line > 0 || !!item.targetText
+                                    ? html`<sl-icon-button
                                       class="item-focus-btn"
                                       name="crosshair"
                                       title="エディタで該当箇所を表示"
                                       @click=${() => {
-                                        const line = item.line;
-                                        if (!line) return;
                                         this.dispatchEvent(
                                           new CustomEvent<FocusItemDetail>("focus-item", {
-                                            detail: { line },
+                                            detail: { line: item.line, targetText: item.targetText },
                                             bubbles: true,
                                             composed: true,
                                           }),
                                         );
                                       }}
                                     ></sl-icon-button>`
-                                  : nothing}
+                                    : nothing
+                                }
                               </div>
                             `,
                           )}
@@ -662,17 +671,20 @@ export class JpReviewPane extends LitElement {
                   )}
                 </div>
               `
-            : html`
+              : html`
                 <div class="result-box ${showPlaceholder ? "placeholder" : ""} ${showLoading ? "loading" : ""}">
-                  ${showPlaceholder
-                    ? "レビュー結果がここに表示されます"
-                    : showLoading
-                      ? html`<sl-spinner></sl-spinner><span class="loading-text">AIが校閲中…</span>`
-                      : showRawResult
-                        ? this.result
-                        : nothing}
+                  ${
+                    showPlaceholder
+                      ? "レビュー結果がここに表示されます"
+                      : showLoading
+                        ? html`<sl-spinner></sl-spinner><span class="loading-text">AIが校閲中…</span>`
+                        : showRawResult
+                          ? this.result
+                          : nothing
+                  }
                 </div>
-              `}
+              `
+          }
         </div>
       </sl-split-panel>
     `;
