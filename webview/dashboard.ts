@@ -6,6 +6,9 @@
  *   - `jp-settings-pane` (webview/components/settings-pane.ts)
  */
 
+// Shoelace theme CSS — emitted by esbuild as dist/webview/dashboard.css
+import "@shoelace-style/shoelace/dist/themes/dark.css";
+import "@shoelace-style/shoelace/dist/themes/light.css";
 // Shoelace tab components (pane components import the rest)
 import "@shoelace-style/shoelace/dist/components/tab-group/tab-group.js";
 import "@shoelace-style/shoelace/dist/components/tab-panel/tab-panel.js";
