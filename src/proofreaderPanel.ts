@@ -12,6 +12,7 @@ import {
   SYSTEM_PROMPT_FILE_KEY,
   SYSTEM_PROMPT_KEY,
 } from "./constants.js";
+import type { ReviewOutlineProvider, ReviewItem } from "./reviewOutlineProvider.js";
 
 /**
  * Singleton WebviewPanel that hosts the JP Proofreader UI.
@@ -24,6 +25,7 @@ export class ProofreaderPanel {
   private readonly _panel: vscode.WebviewPanel;
   private readonly _context: vscode.ExtensionContext;
   private readonly _diagnosticCollection: vscode.DiagnosticCollection | undefined;
+  private readonly _outlineProvider: ReviewOutlineProvider | undefined;
   private readonly _disposables: vscode.Disposable[] = [];
   /** Token source for the currently running review — cancelled when a new review starts. */
   private _currentReviewTokenSource: vscode.CancellationTokenSource | undefined;
@@ -48,7 +50,11 @@ export class ProofreaderPanel {
     ProofreaderPanel._outputChannel = undefined;
   }
 
-  static createOrShow(context: vscode.ExtensionContext, diagnosticCollection?: vscode.DiagnosticCollection): void {
+  static createOrShow(
+    context: vscode.ExtensionContext,
+    diagnosticCollection?: vscode.DiagnosticCollection,
+    outlineProvider?: ReviewOutlineProvider,
+  ): void {
     if (ProofreaderPanel._current) {
       ProofreaderPanel._current._panel.reveal();
       return;
@@ -57,17 +63,19 @@ export class ProofreaderPanel {
       enableScripts: true,
       localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, "dist", "webview")],
     });
-    ProofreaderPanel._current = new ProofreaderPanel(panel, context, diagnosticCollection);
+    ProofreaderPanel._current = new ProofreaderPanel(panel, context, diagnosticCollection, outlineProvider);
   }
 
   constructor(
     panel: vscode.WebviewPanel,
     context: vscode.ExtensionContext,
     diagnosticCollection?: vscode.DiagnosticCollection,
+    outlineProvider?: ReviewOutlineProvider,
   ) {
     this._panel = panel;
     this._context = context;
     this._diagnosticCollection = diagnosticCollection;
+    this._outlineProvider = outlineProvider;
     this._panel.webview.html = this._buildHtml(panel.webview, context);
 
     // Track the lastactive text editor so focus-item works even after the webview takes focus.
@@ -487,6 +495,7 @@ export class ProofreaderPanel {
       this._log(`[runReview] phase 2 done. items=${items ? items.length : "null"}`);
       if (items) {
         this._setDiagnostics(items);
+        this._outlineProvider?.refresh(items as ReviewItem[]);
       }
       void this._panel.webview.postMessage({ type: "reviewDone", items: items ?? undefined });
     } catch (err) {

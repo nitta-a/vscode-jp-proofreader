@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { ProofreaderCodeActionProvider } from "./codeActionProvider.js";
 import { DEFAULT_SYSTEM_PROMPT, DIAGNOSTIC_SOURCE, SYSTEM_PROMPT_KEY } from "./constants.js";
 import { ProofreaderPanel } from "./proofreaderPanel.js";
+import { ReviewOutlineProvider } from "./reviewOutlineProvider.js";
 import { SidebarViewProvider } from "./viewProvider.js";
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -21,10 +22,78 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerWebviewViewProvider(SidebarViewProvider.viewId, new SidebarViewProvider(context)),
   );
 
+  // Review outline TreeView in the activity bar sidebar
+  const reviewOutlineProvider = new ReviewOutlineProvider();
+  context.subscriptions.push(
+    vscode.window.registerTreeDataProvider("vscode-jp-proofreader.outlineView", reviewOutlineProvider),
+  );
+
+  // Command: jump to the flagged location from a tree item click
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "vscode-jp-proofreader.focusFromTree",
+      (line: number, targetText?: string) => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+          void vscode.window.showInformationMessage(
+            "JP Proofreader: 文字列の特定に失敗しました（アクティブなエディタが見つかりません）",
+          );
+          return;
+        }
+
+        // If a targetText is provided, try to find it near the indicated line first.
+        if (targetText) {
+          const docText = editor.document.getText();
+          // Try to match near the line hint before falling back to global first match.
+          let matchIndex = -1;
+          if (typeof line === "number" && line > 0) {
+            const lineIndex = Math.max(0, line - 1);
+            const startOffset = editor.document.offsetAt(new vscode.Position(Math.max(0, lineIndex - 5), 0));
+            const endOffset = editor.document.offsetAt(
+              new vscode.Position(Math.min(editor.document.lineCount - 1, lineIndex + 5), 0),
+            );
+            const nearbyText = docText.slice(startOffset, endOffset + editor.document.lineAt(Math.min(editor.document.lineCount - 1, lineIndex + 5)).text.length);
+            const nearbyIndex = nearbyText.indexOf(targetText);
+            if (nearbyIndex !== -1) {
+              matchIndex = startOffset + nearbyIndex;
+            }
+          }
+          if (matchIndex === -1) {
+            matchIndex = docText.indexOf(targetText);
+          }
+          if (matchIndex !== -1) {
+            const start = editor.document.positionAt(matchIndex);
+            const end = editor.document.positionAt(matchIndex + targetText.length);
+            const range = new vscode.Range(start, end);
+            void vscode.window.showTextDocument(editor.document, {
+              selection: range,
+              preserveFocus: false,
+              viewColumn: editor.viewColumn,
+            });
+            return;
+          }
+        }
+
+        // Fall back to line number.
+        if (typeof line === "number" && line > 0) {
+          const lineIndex = line - 1;
+          if (lineIndex < editor.document.lineCount) {
+            const range = editor.document.lineAt(lineIndex).range;
+            void vscode.window.showTextDocument(editor.document, {
+              selection: range,
+              preserveFocus: false,
+              viewColumn: editor.viewColumn,
+            });
+          }
+        }
+      },
+    ),
+  );
+
   // Command: open the panel in the editor area
   context.subscriptions.push(
     vscode.commands.registerCommand("jp-proofreader.check", () => {
-      ProofreaderPanel.createOrShow(context, diagnosticCollection);
+      ProofreaderPanel.createOrShow(context, diagnosticCollection, reviewOutlineProvider);
     }),
   );
 

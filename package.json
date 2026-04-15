@@ -21,6 +21,10 @@
       {
         "command": "jp-proofreader.check",
         "title": "JP Proofreader: Check"
+      },
+      {
+        "command": "vscode-jp-proofreader.focusFromTree",
+        "title": "該当箇所にフォーカス"
       }
     ],
     "viewsContainers": {
@@ -38,6 +42,11 @@
           "type": "webview",
           "id": "jp-proofreader-view",
           "name": "プロジェクト固有ルール"
+        },
+        {
+          "type": "tree",
+          "id": "vscode-jp-proofreader.outlineView",
+          "name": "校閲アウトライン"
         }
       ]
     },
