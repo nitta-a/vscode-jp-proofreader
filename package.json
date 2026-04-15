@@ -68,6 +68,12 @@
           "items": { "type": "string" },
           "default": ["mini", "flash", "haiku", "nano"],
           "description": "校閲への使用から除外するモデルを識別するための正規表現パターンの一覧（大文字小文字を区別しない）。このリストのいずれかにマッチするモデルは、許可リストの設定にかかわらず表示されません。"
+        },
+        "vscode-jp-proofreader.customRules": {
+          "type": "string",
+          "default": "",
+          "description": "プロジェクト固有の校閲ルールや用語集を指定します。",
+          "editPresentation": "multilineText"
         }
       }
     }

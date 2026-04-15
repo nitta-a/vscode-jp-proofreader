@@ -22,7 +22,7 @@ import { customElement, state } from "lit/decorators.js";
 import "./components/review-pane";
 import "./components/settings-pane";
 import type { FetchUrlDetail, ReviewRequestDetail } from "./components/review-pane";
-import type { SavePromptToFileDetail, SaveSettingsDetail } from "./components/settings-pane";
+import type { SavePromptToFileDetail, SaveSettingsDetail, UpdateCustomRulesDetail } from "./components/settings-pane";
 // Shared API singleton and types
 import { type HostMsg, type ModelInfo, type ReviewItem, vscode } from "./vscode-api";
 
@@ -43,6 +43,7 @@ class JpProofreaderApp extends LitElement {
   @state() private _promptFilePath = "";
   @state() private _fileOpError = "";
   @state() private _loadVersion = 0;
+  @state() private _customRules = "";
 
   static override styles = css`
     :host {
@@ -123,6 +124,7 @@ class JpProofreaderApp extends LitElement {
       this._systemPrompt = msg.systemPrompt;
       this._defaultSystemPrompt = msg.defaultSystemPrompt;
       this._promptFilePath = msg.promptFilePath ?? "";
+      this._customRules = msg.customRules ?? "";
     } else if (msg.type === "urlContent") {
       console.log(`[JP Proofreader] urlContent length=${msg.text.length}`);
       this._urlLoading = false;
@@ -205,6 +207,11 @@ class JpProofreaderApp extends LitElement {
     vscode.postMessage({ type: "loadPromptFromFile" });
   };
 
+  private _handleUpdateCustomRules = (e: CustomEvent<UpdateCustomRulesDetail>): void => {
+    this._customRules = e.detail.customRules;
+    vscode.postMessage({ type: "updateSettings", customRules: e.detail.customRules });
+  };
+
   override render() {
     return html`
       <sl-tab-group>
@@ -232,9 +239,11 @@ class JpProofreaderApp extends LitElement {
             .promptFilePath=${this._promptFilePath}
             .fileOpError=${this._fileOpError}
             .loadVersion=${this._loadVersion}
+            .customRules=${this._customRules}
             @jp-save-settings=${this._handleSaveSettings}
             @jp-save-prompt-to-file=${this._handleSavePromptToFile}
             @jp-load-prompt-from-file=${this._handleLoadPromptFromFile}
+            @jp-update-custom-rules=${this._handleUpdateCustomRules}
           ></jp-settings-pane>
         </sl-tab-panel>
       </sl-tab-group>

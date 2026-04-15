@@ -14,6 +14,7 @@ import { customElement, property, state } from "lit/decorators.js";
 
 export type SaveSettingsDetail = { systemPrompt: string };
 export type SavePromptToFileDetail = { systemPrompt: string };
+export type UpdateCustomRulesDetail = { customRules: string };
 
 @customElement("jp-settings-pane")
 export class JpSettingsPane extends LitElement {
@@ -25,6 +26,8 @@ export class JpSettingsPane extends LitElement {
   @property() promptFilePath = "";
   /** Error message from a file operation (empty string when none). */
   @property() fileOpError = "";
+  /** Project-specific custom rules / glossary. */
+  @property() customRules = "";
   /**
    * Incremented by the parent each time a file is loaded so that
    * willUpdate can force-sync _localPrompt from systemPrompt.
@@ -168,6 +171,17 @@ export class JpSettingsPane extends LitElement {
     this.dispatchEvent(new CustomEvent("jp-load-prompt-from-file", { bubbles: true, composed: true }));
   };
 
+  private _handleCustomRulesChange = (e: Event): void => {
+    const value = (e.target as SlTextarea).value;
+    this.dispatchEvent(
+      new CustomEvent<UpdateCustomRulesDetail>("jp-update-custom-rules", {
+        detail: { customRules: value },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  };
+
   override render() {
     return html`
       <div class="settings-pane">
@@ -184,6 +198,16 @@ export class JpSettingsPane extends LitElement {
           <sl-button variant="primary" @click=${this._save}>保存</sl-button>
           <sl-button variant="default" @click=${this._reset}>デフォルトに戻す</sl-button>
           ${this._settingsSaved ? html`<span class="save-ok">保存しました</span>` : nothing}
+        </div>
+
+        <div class="file-section">
+          <p class="pane-label">プロジェクト固有のルール / 用語集</p>
+          <sl-textarea
+            label="カスタムルール"
+            rows="6"
+            .value=${this.customRules}
+            @sl-change=${this._handleCustomRulesChange}
+          ></sl-textarea>
         </div>
 
         <div class="file-section">
