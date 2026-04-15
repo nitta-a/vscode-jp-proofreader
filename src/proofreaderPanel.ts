@@ -31,6 +31,8 @@ export class ProofreaderPanel {
   private _currentReviewTokenSource: vscode.CancellationTokenSource | undefined;
   /** Last known active text editor — updated each time the active editor changes. */
   private _lastActiveEditor: vscode.TextEditor | undefined;
+  /** Cleaned plain-text content of the last URL fetch — used for lazy untitled-editor creation. */
+  private _lastFetchedText = "";
 
   /** Write a log line to the output channel when jp-proofreader.enableLogs is true. */
   private _log(message: string): void {
@@ -117,7 +119,13 @@ export class ProofreaderPanel {
           this._currentReviewTokenSource?.cancel();
           this._currentReviewTokenSource?.dispose();
           this._currentReviewTokenSource = undefined;
-          void this._runReview(msg.text, msg.modelId);
+          // Ensure an untitled editor is open with the URL-fetched text (if any)
+          // so Focus works after the review completes.
+          const reviewText = msg.text;
+          const reviewModelId = msg.modelId;
+          void this._ensureUrlTextEditor()
+            .then(() => this._runReview(reviewText, reviewModelId))
+            .catch((err: Error) => this._log(`[review] error before runReview: ${err.message}`));
         } else if (msg.type === "getSettings") {
           this._sendSettings();
         } else if (msg.type === "setSettings" && typeof msg.systemPrompt === "string") {
@@ -137,11 +145,20 @@ export class ProofreaderPanel {
         } else if (msg.type === "fetchUrl" && typeof msg.url === "string") {
           void this._fetchUrl(msg.url);
         } else if (msg.type === "focusText" && typeof msg.line === "number") {
-          if (msg.line > 0) {
-            this._focusLineInEditor(msg.line);
-          } else if (typeof msg.targetText === "string" && msg.targetText) {
-            this._focusTextInEditor(msg.targetText);
-          }
+          const focusLine = msg.line;
+          const focusTargetText = msg.targetText;
+          const doFocus = (): void => {
+            if (focusLine > 0) {
+              this._focusLineInEditor(focusLine);
+            } else if (typeof focusTargetText === "string" && focusTargetText) {
+              this._focusTextInEditor(focusTargetText);
+            }
+          };
+          // Open the URL-text editor lazily before trying to focus, so that
+          // _focusTextInEditor / _focusLineInEditor can locate the content.
+          void this._ensureUrlTextEditor()
+            .then(doFocus)
+            .catch((err: Error) => this._log(`[focusText] error before focus: ${err.message}`));
         }
       },
       undefined,
@@ -391,6 +408,35 @@ export class ProofreaderPanel {
     }
   }
 
+  /**
+   * Opens an untitled VS Code editor containing `_lastFetchedText` unless one
+   * is already open with that exact content.  Returns immediately when there is
+   * no cached URL text.  This is called lazily — just before a Focus or Review
+   * action — so that the editor tab is only created when the user actually needs
+   * to interact with the fetched content.
+   */
+  private async _ensureUrlTextEditor(): Promise<void> {
+    if (!this._lastFetchedText) {
+      return;
+    }
+    const editor = this._resolveEditor();
+    if (
+      editor &&
+      editor.document.getText().length === this._lastFetchedText.length &&
+      editor.document.getText() === this._lastFetchedText
+    ) {
+      // A matching editor is already open — nothing to do.
+      return;
+    }
+    try {
+      const doc = await vscode.workspace.openTextDocument({ content: this._lastFetchedText, language: "plaintext" });
+      await vscode.window.showTextDocument(doc, { preserveFocus: true });
+      this._log("[ensureUrlTextEditor] opened untitled editor for URL-fetched text");
+    } catch (err) {
+      this._log(`[ensureUrlTextEditor] failed to open untitled editor: ${(err as Error).message}`);
+    }
+  }
+
   private _fetchUrl(rawUrl: string): Promise<void> {
     return new Promise((resolve) => {
       let parsedUrl: URL;
@@ -434,14 +480,8 @@ export class ProofreaderPanel {
         res.on("end", () => {
           const html = Buffer.concat(chunks).toString("utf-8");
           const text = this._htmlToText(html);
-          // Open the cleaned text in an untitled editor so that the Focus
-          // feature can locate targetText in a VS Code document.  Using
-          // preserveFocus keeps the webview panel in the foreground.
-          void Promise.resolve(
-            vscode.workspace
-              .openTextDocument({ content: text, language: "plaintext" })
-              .then((doc) => vscode.window.showTextDocument(doc, { preserveFocus: true })),
-          ).catch((err: Error) => this._log(`[fetchUrl] failed to open untitled editor: ${err.message}`));
+          // Cache the cleaned text so Focus / Review can lazily open an untitled editor later.
+          this._lastFetchedText = text;
           void this._panel.webview.postMessage({ type: "urlContent", text });
           resolve();
         });
