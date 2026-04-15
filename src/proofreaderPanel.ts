@@ -137,10 +137,10 @@ export class ProofreaderPanel {
         } else if (msg.type === "fetchUrl" && typeof msg.url === "string") {
           void this._fetchUrl(msg.url);
         } else if (msg.type === "focusText" && typeof msg.line === "number") {
-          if (msg.line > 0) {
+          if (typeof msg.targetText === "string" && msg.targetText) {
+            this._focusTextInEditor(msg.targetText, msg.line);
+          } else if (msg.line > 0) {
             this._focusLineInEditor(msg.line);
-          } else if (typeof msg.targetText === "string" && msg.targetText) {
-            this._focusTextInEditor(msg.targetText);
           }
         }
       },
@@ -172,13 +172,28 @@ export class ProofreaderPanel {
     );
   }
 
-  private _focusTextInEditor(targetText: string): void {
-    this._log(`[focusText] targetText="${targetText}"`);
+  private _focusTextInEditor(targetText: string, lineHint?: number): void {
+    this._log(`[focusText] targetText="${targetText}" lineHint=${lineHint}`);
 
     // Helper: try to find and select targetText in a given document, then show it.
     const tryDocument = (doc: vscode.TextDocument, preferredColumn?: vscode.ViewColumn): boolean => {
       const text = doc.getText();
-      const offset = text.indexOf(targetText);
+      // When a lineHint is provided, prefer the match closest to that line (±5 lines).
+      let offset = -1;
+      if (typeof lineHint === "number" && lineHint > 0) {
+        const lineIndex = Math.max(0, lineHint - 1);
+        const startOffset = doc.offsetAt(new vscode.Position(Math.max(0, lineIndex - 5), 0));
+        const endLine = Math.min(doc.lineCount - 1, lineIndex + 5);
+        const endOffset = doc.offsetAt(new vscode.Position(endLine, 0)) + doc.lineAt(endLine).text.length;
+        const nearbyText = text.slice(startOffset, endOffset);
+        const nearbyIndex = nearbyText.indexOf(targetText);
+        if (nearbyIndex !== -1) {
+          offset = startOffset + nearbyIndex;
+        }
+      }
+      if (offset === -1) {
+        offset = text.indexOf(targetText);
+      }
       if (offset === -1) {
         return false;
       }
