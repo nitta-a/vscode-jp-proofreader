@@ -7,6 +7,7 @@
 import "@shoelace-style/shoelace/dist/components/button/button.js";
 import "@shoelace-style/shoelace/dist/components/details/details.js";
 import "@shoelace-style/shoelace/dist/components/icon-button/icon-button.js";
+import "@shoelace-style/shoelace/dist/components/icon/icon.js";
 import "@shoelace-style/shoelace/dist/components/input/input.js";
 import "@shoelace-style/shoelace/dist/components/option/option.js";
 import "@shoelace-style/shoelace/dist/components/select/select.js";
@@ -573,7 +574,7 @@ export class JpReviewPane extends LitElement {
               : nothing
           }
           <sl-textarea
-            placeholder="校閲したいテキストを入力してください…"
+            placeholder="校閲したいテキストを入力してください。またはURLを読み込むとここに表示されます。"
             .value=${this._inputText}
             @sl-input=${(e: CustomEvent) => {
               this._inputText = (e.target as SlTextarea).value;
@@ -588,7 +589,6 @@ export class JpReviewPane extends LitElement {
         </div>
 
         <div slot="end" class="pane">
-          <p class="pane-label">AIレビュー</p>
           <sl-select
             label="モデル"
             .value=${this._modelId}
@@ -606,7 +606,8 @@ export class JpReviewPane extends LitElement {
             ?disabled=${this.loading || !this._modelId}
             @click=${this._startReview}
           >
-            AIレビュー
+            <sl-icon slot="prefix" name="stars"></sl-icon>
+            Copilotレビュー
           </sl-button>
 
           ${displayError ? html`<p class="error-msg">${displayError}</p>` : nothing}
