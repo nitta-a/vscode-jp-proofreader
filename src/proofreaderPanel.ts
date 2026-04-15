@@ -27,6 +27,8 @@ export class ProofreaderPanel {
   private readonly _disposables: vscode.Disposable[] = [];
   /** Token source for the currently running review — cancelled when a new review starts. */
   private _currentReviewTokenSource: vscode.CancellationTokenSource | undefined;
+  /** Last known active text editor — updated each time the active editor changes. */
+  private _lastActiveEditor: vscode.TextEditor | undefined;
 
   /** Write a log line to the output channel when jp-proofreader.enableLogs is true. */
   private _log(message: string): void {
@@ -68,14 +70,35 @@ export class ProofreaderPanel {
     this._diagnosticCollection = diagnosticCollection;
     this._panel.webview.html = this._buildHtml(panel.webview, context);
 
+    // Track the lastactive text editor so focus-item works even after the webview takes focus.
+    // Only track file/untitled editors — output channels and other virtual documents must be ignored.
+    const isTextEditor = (editor: vscode.TextEditor): boolean => {
+      const scheme = editor.document.uri.scheme;
+      return scheme === "file" || scheme === "untitled";
+    };
+    if (vscode.window.activeTextEditor && isTextEditor(vscode.window.activeTextEditor)) {
+      this._lastActiveEditor = vscode.window.activeTextEditor;
+    }
+    vscode.window.onDidChangeActiveTextEditor(
+      (editor) => {
+        if (editor && isTextEditor(editor)) {
+          this._lastActiveEditor = editor;
+        }
+      },
+      undefined,
+      this._disposables,
+    );
+
     this._panel.webview.onDidReceiveMessage(
       (msg: {
         type: string;
         text?: string;
         modelId?: string;
         systemPrompt?: string;
-        customRules?: string;
         url?: string;
+        targetText?: string;
+        line?: number;
+        customRules?: string;
       }) => {
         this._log(`[webview→host] type="${msg.type}"`);
         if (msg.type === "requestModels") {
@@ -105,6 +128,8 @@ export class ProofreaderPanel {
           void this._loadPromptFromFile();
         } else if (msg.type === "fetchUrl" && typeof msg.url === "string") {
           void this._fetchUrl(msg.url);
+        } else if (msg.type === "focusText" && typeof msg.line === "number") {
+          this._focusLineInEditor(msg.line);
         }
       },
       undefined,
@@ -112,6 +137,31 @@ export class ProofreaderPanel {
     );
 
     this._panel.onDidDispose(() => this._disposePanel(), undefined, this._disposables);
+  }
+
+  private _focusLineInEditor(line: number): void {
+    this._log(`[focusText] line=${line}`);
+    const editor = vscode.window.activeTextEditor ?? this._lastActiveEditor;
+    if (!editor) {
+      this._log("[focusText] no active editor");
+      void vscode.window.showInformationMessage(
+        "JP Proofreader: 文字列の特定に失敗しました（アクティブなエディタが見つかりません）",
+      );
+      return;
+    }
+    const lineIndex = line - 1;
+    if (lineIndex < 0 || lineIndex >= editor.document.lineCount) {
+      this._log(`[focusText] line ${line} out of range (document has ${editor.document.lineCount} lines)`);
+      void vscode.window.showInformationMessage("JP Proofreader: 文字列の特定に失敗しました（行番号が範囲外です）");
+      return;
+    }
+    const range = editor.document.lineAt(lineIndex).range;
+    this._log(`[focusText] focusing line ${line} in "${editor.document.fileName}"`);
+    void vscode.window.showTextDocument(editor.document, {
+      selection: range,
+      preserveFocus: false,
+      viewColumn: editor.viewColumn,
+    });
   }
 
   private _sendSettings(): void {
@@ -467,6 +517,7 @@ export class ProofreaderPanel {
     content: string;
     targetText: string;
     replacementText: string;
+    line: number;
   }> | null> {
     try {
       const phase2Messages = [
@@ -487,9 +538,14 @@ export class ProofreaderPanel {
   }
 
   /** Parse a JSON array of review items from raw LLM output. */
-  private _parseItems(
-    raw: string,
-  ): Array<{ viewpoint: string; level: string; content: string; targetText: string; replacementText: string }> | null {
+  private _parseItems(raw: string): Array<{
+    viewpoint: string;
+    level: string;
+    content: string;
+    targetText: string;
+    replacementText: string;
+    line: number;
+  }> | null {
     const start = raw.indexOf("[");
     const end = raw.lastIndexOf("]");
     if (start === -1 || end === -1 || end < start) {
@@ -510,13 +566,14 @@ export class ProofreaderPanel {
             typeof (item as Record<string, unknown>).replacementText === "string",
         )
       ) {
-        return parsed as Array<{
-          viewpoint: string;
-          level: string;
-          content: string;
-          targetText: string;
-          replacementText: string;
-        }>;
+        return (parsed as Array<Record<string, unknown>>).map((item) => ({
+          viewpoint: item.viewpoint as string,
+          level: item.level as string,
+          content: item.content as string,
+          targetText: item.targetText as string,
+          replacementText: item.replacementText as string,
+          line: typeof item.line === "number" ? (item.line as number) : 0,
+        }));
       }
     } catch {
       // fall through
@@ -530,12 +587,19 @@ export class ProofreaderPanel {
    * attaches a Diagnostic at that location.
    */
   private _setDiagnostics(
-    items: Array<{ viewpoint: string; level: string; content: string; targetText: string; replacementText: string }>,
+    items: Array<{
+      viewpoint: string;
+      level: string;
+      content: string;
+      targetText: string;
+      replacementText: string;
+      line: number;
+    }>,
   ): void {
     if (!this._diagnosticCollection) {
       return;
     }
-    const editor = vscode.window.activeTextEditor;
+    const editor = vscode.window.activeTextEditor ?? this._lastActiveEditor;
     if (!editor) {
       return;
     }
@@ -552,6 +616,7 @@ export class ProofreaderPanel {
       }
       const start = document.positionAt(index);
       const end = document.positionAt(index + item.targetText.length);
+      item.line = start.line + 1;
       const range = new vscode.Range(start, end);
       let severity: vscode.DiagnosticSeverity;
       if (item.level === "error") {
@@ -582,7 +647,7 @@ export class ProofreaderPanel {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}'; style-src ${csp} 'unsafe-inline'; img-src ${csp} data: blob:; font-src ${csp};">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}'; style-src ${csp} 'unsafe-inline'; img-src ${csp} data: blob:; font-src ${csp}; connect-src ${csp};">
   <meta name="sl-base" content="${slBase}">
   <link rel="stylesheet" href="${cssUri}">
   <title>JP Proofreader</title>

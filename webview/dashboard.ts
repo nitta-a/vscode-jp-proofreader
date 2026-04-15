@@ -21,7 +21,7 @@ import { customElement, state } from "lit/decorators.js";
 // Child components
 import "./components/review-pane";
 import "./components/settings-pane";
-import type { FetchUrlDetail, ReviewRequestDetail } from "./components/review-pane";
+import type { FetchUrlDetail, FocusItemDetail, ReviewRequestDetail } from "./components/review-pane";
 import type { SavePromptToFileDetail, SaveSettingsDetail, UpdateCustomRulesDetail } from "./components/settings-pane";
 // Shared API singleton and types
 import { type HostMsg, type ModelInfo, type ReviewItem, vscode } from "./vscode-api";
@@ -149,6 +149,10 @@ class JpProofreaderApp extends LitElement {
     }
   };
 
+  private _handleFocusItem = (e: CustomEvent<FocusItemDetail>): void => {
+    vscode.postMessage({ type: "focusText", line: e.detail.line });
+  };
+
   private _handleFetchUrl = (e: CustomEvent<FetchUrlDetail>): void => {
     this._hostError = "";
     this._urlLoading = true;
@@ -229,6 +233,7 @@ class JpProofreaderApp extends LitElement {
             ?urlLoading=${this._urlLoading}
             @jp-review=${this._handleReview}
             @jp-fetch-url=${this._handleFetchUrl}
+            @focus-item=${this._handleFocusItem}
           ></jp-review-pane>
         </sl-tab-panel>
 

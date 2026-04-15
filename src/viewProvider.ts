@@ -7,7 +7,10 @@ import { ProofreaderPanel } from "./proofreaderPanel.js";
  * Renders a single button that opens the main ProofreaderPanel in the editor area.
  */
 export class ProofreaderViewProvider implements vscode.WebviewViewProvider {
-  constructor(private readonly _context: vscode.ExtensionContext) {}
+  constructor(
+    private readonly _context: vscode.ExtensionContext,
+    private readonly _diagnosticCollection: vscode.DiagnosticCollection,
+  ) {}
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     webviewView.webview.options = { enableScripts: true };
@@ -15,7 +18,7 @@ export class ProofreaderViewProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.onDidReceiveMessage((msg: { type: string }) => {
       if (msg.type === "openPanel") {
-        ProofreaderPanel.createOrShow(this._context);
+        ProofreaderPanel.createOrShow(this._context, this._diagnosticCollection);
       }
     });
   }

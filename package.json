@@ -2,7 +2,7 @@
   "name": "vscode-jp-proofreader",
   "displayName": "JP Proofreader",
   "description": "Japanese proofreading extension for VS Code",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "icon": "images/icon.png",
   "publisher": "nitta-a",
   "repository": {
@@ -28,7 +28,7 @@
         {
           "id": "jp-proofreader-container",
           "title": "JP Proofreader",
-          "icon": "images/icon.svg"
+          "icon": "images/activity-icon.svg"
         }
       ]
     },

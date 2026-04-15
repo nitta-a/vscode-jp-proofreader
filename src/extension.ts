@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
-import { DEFAULT_SYSTEM_PROMPT, DIAGNOSTIC_SOURCE, SYSTEM_PROMPT_KEY } from "./constants.js";
 import { ProofreaderCodeActionProvider } from "./codeActionProvider.js";
+import { DEFAULT_SYSTEM_PROMPT, DIAGNOSTIC_SOURCE, SYSTEM_PROMPT_KEY } from "./constants.js";
 import { ProofreaderPanel } from "./proofreaderPanel.js";
 import { ProofreaderViewProvider } from "./viewProvider.js";
 
@@ -17,7 +17,7 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   // Sidebar view (activity bar icon → WebviewView)
-  const viewProvider = new ProofreaderViewProvider(context);
+  const viewProvider = new ProofreaderViewProvider(context, diagnosticCollection);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider("jp-proofreader-view", viewProvider, {
       webviewOptions: { retainContextWhenHidden: true },

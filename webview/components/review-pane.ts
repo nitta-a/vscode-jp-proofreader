@@ -6,6 +6,7 @@
 
 import "@shoelace-style/shoelace/dist/components/button/button.js";
 import "@shoelace-style/shoelace/dist/components/details/details.js";
+import "@shoelace-style/shoelace/dist/components/icon-button/icon-button.js";
 import "@shoelace-style/shoelace/dist/components/input/input.js";
 import "@shoelace-style/shoelace/dist/components/option/option.js";
 import "@shoelace-style/shoelace/dist/components/select/select.js";
@@ -21,6 +22,7 @@ import type { ModelInfo, ReviewItem } from "../vscode-api";
 
 export type ReviewRequestDetail = { text: string; modelId: string };
 export type FetchUrlDetail = { url: string };
+export type FocusItemDetail = { line: number };
 
 @customElement("jp-review-pane")
 export class JpReviewPane extends LitElement {
@@ -241,6 +243,15 @@ export class JpReviewPane extends LitElement {
     .item-row .level-dot {
       margin-top: 4px;
       flex-shrink: 0;
+    }
+
+    .item-focus-btn {
+      flex-shrink: 0;
+      margin-left: auto;
+      opacity: 0.55;
+    }
+    .item-focus-btn:hover {
+      opacity: 1;
     }
 
     .item-body {
@@ -624,6 +635,24 @@ export class JpReviewPane extends LitElement {
                                       </p>`
                                     : nothing}
                                 </div>
+                                ${item.line > 0
+                                  ? html`<sl-icon-button
+                                      class="item-focus-btn"
+                                      name="crosshair"
+                                      title="エディタで該当箇所を表示"
+                                      @click=${() => {
+                                        const line = item.line;
+                                        if (!line) return;
+                                        this.dispatchEvent(
+                                          new CustomEvent<FocusItemDetail>("focus-item", {
+                                            detail: { line },
+                                            bubbles: true,
+                                            composed: true,
+                                          }),
+                                        );
+                                      }}
+                                    ></sl-icon-button>`
+                                  : nothing}
                               </div>
                             `,
                           )}
