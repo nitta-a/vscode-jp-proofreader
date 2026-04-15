@@ -93,9 +93,12 @@ export class ProofreaderPanel {
           void this._context.globalState.update(SYSTEM_PROMPT_KEY, msg.systemPrompt);
           this._sendSettings();
         } else if (msg.type === "updateSettings" && typeof msg.customRules === "string") {
+          const target = vscode.workspace.workspaceFolders?.length
+            ? vscode.ConfigurationTarget.Workspace
+            : vscode.ConfigurationTarget.Global;
           void vscode.workspace
             .getConfiguration("vscode-jp-proofreader")
-            .update("customRules", msg.customRules, vscode.ConfigurationTarget.Global);
+            .update("customRules", msg.customRules, target);
         } else if (msg.type === "savePromptToFile" && typeof msg.systemPrompt === "string") {
           void this._savePromptToFile(msg.systemPrompt);
         } else if (msg.type === "loadPromptFromFile") {

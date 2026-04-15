@@ -171,7 +171,7 @@ export class JpSettingsPane extends LitElement {
     this.dispatchEvent(new CustomEvent("jp-load-prompt-from-file", { bubbles: true, composed: true }));
   };
 
-  private _handleCustomRulesChange = (e: CustomEvent): void => {
+  private _handleCustomRulesChange = (e: Event): void => {
     const value = (e.target as SlTextarea).value;
     this.dispatchEvent(
       new CustomEvent<UpdateCustomRulesDetail>("jp-update-custom-rules", {
