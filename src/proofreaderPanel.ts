@@ -388,7 +388,7 @@ export class ProofreaderPanel {
 
     const detailRows =
       items.length === 0
-        ? ["| - | - | - | - | - | - | - |"]
+        ? ["| - | - | - | - | - | - |"]
         : items.map((item) => {
             const line = item.line > 0 ? String(item.line) : "-";
             return `| ${line} | ${this._escapeMarkdown(item.viewpoint)} | ${this._escapeMarkdown(item.level)} | ${this._escapeMarkdown(item.targetText)} | ${this._escapeMarkdown(item.replacementText)} | ${this._escapeMarkdown(item.content)} |`;
@@ -429,7 +429,7 @@ export class ProofreaderPanel {
     const defaultUri = vscode.Uri.file(path.join(defaultDir, defaultFileName));
     const saveUri = await vscode.window.showSaveDialog({
       defaultUri,
-      filters: { Markdown: ["md"] },
+      filters: { markdown: ["md"] },
       saveLabel: "校閲結果を保存",
       title: "校閲結果をMarkdownとして保存",
     });
