@@ -111,6 +111,7 @@ class JpSidebarApp extends LitElement {
 
   private _handlePresetChange = (e: Event): void => {
     const value = (e.target as SlSelect).value as string;
+    this._activePresetId = value;
     sidebarVscode.postMessage({ type: "applyPreset", presetId: value });
   };
 
