@@ -41,13 +41,29 @@ export function activate(context: vscode.ExtensionContext): void {
           return;
         }
 
-        // If a targetText is provided, try to find it in the document first.
+        // If a targetText is provided, try to find it near the indicated line first.
         if (targetText) {
           const docText = editor.document.getText();
-          const index = docText.indexOf(targetText);
-          if (index !== -1) {
-            const start = editor.document.positionAt(index);
-            const end = editor.document.positionAt(index + targetText.length);
+          // Try to match near the line hint before falling back to global first match.
+          let matchIndex = -1;
+          if (typeof line === "number" && line > 0) {
+            const lineIndex = Math.max(0, line - 1);
+            const startOffset = editor.document.offsetAt(new vscode.Position(Math.max(0, lineIndex - 5), 0));
+            const endOffset = editor.document.offsetAt(
+              new vscode.Position(Math.min(editor.document.lineCount - 1, lineIndex + 5), 0),
+            );
+            const nearbyText = docText.slice(startOffset, endOffset + editor.document.lineAt(Math.min(editor.document.lineCount - 1, lineIndex + 5)).text.length);
+            const nearbyIndex = nearbyText.indexOf(targetText);
+            if (nearbyIndex !== -1) {
+              matchIndex = startOffset + nearbyIndex;
+            }
+          }
+          if (matchIndex === -1) {
+            matchIndex = docText.indexOf(targetText);
+          }
+          if (matchIndex !== -1) {
+            const start = editor.document.positionAt(matchIndex);
+            const end = editor.document.positionAt(matchIndex + targetText.length);
             const range = new vscode.Range(start, end);
             void vscode.window.showTextDocument(editor.document, {
               selection: range,
