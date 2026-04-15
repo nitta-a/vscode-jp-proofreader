@@ -69,7 +69,14 @@ export class ProofreaderPanel {
     this._panel.webview.html = this._buildHtml(panel.webview, context);
 
     this._panel.webview.onDidReceiveMessage(
-      (msg: { type: string; text?: string; modelId?: string; systemPrompt?: string; url?: string }) => {
+      (msg: {
+        type: string;
+        text?: string;
+        modelId?: string;
+        systemPrompt?: string;
+        url?: string;
+        targetText?: string;
+      }) => {
         this._log(`[webview→host] type="${msg.type}"`);
         if (msg.type === "requestModels") {
           void this._sendModels();
@@ -91,6 +98,8 @@ export class ProofreaderPanel {
           void this._loadPromptFromFile();
         } else if (msg.type === "fetchUrl" && typeof msg.url === "string") {
           void this._fetchUrl(msg.url);
+        } else if (msg.type === "focusText" && typeof msg.targetText === "string") {
+          this._focusTextInEditor(msg.targetText);
         }
       },
       undefined,
@@ -98,6 +107,23 @@ export class ProofreaderPanel {
     );
 
     this._panel.onDidDispose(() => this._disposePanel(), undefined, this._disposables);
+  }
+
+  private _focusTextInEditor(targetText: string): void {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      return;
+    }
+    const docText = editor.document.getText();
+    const idx = docText.indexOf(targetText);
+    if (idx === -1) {
+      return;
+    }
+    const start = editor.document.positionAt(idx);
+    const end = editor.document.positionAt(idx + targetText.length);
+    const range = new vscode.Range(start, end);
+    editor.selection = new vscode.Selection(range.start, range.end);
+    editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
   }
 
   private _sendSettings(): void {

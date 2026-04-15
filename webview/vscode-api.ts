@@ -36,7 +36,8 @@ type WebviewToHostMsg =
   | { type: "setSettings"; systemPrompt: string }
   | { type: "savePromptToFile"; systemPrompt: string }
   | { type: "loadPromptFromFile" }
-  | { type: "fetchUrl"; url: string };
+  | { type: "fetchUrl"; url: string }
+  | { type: "focusText"; targetText: string };
 
 // ---------------------------------------------------------------------------
 // Singleton
