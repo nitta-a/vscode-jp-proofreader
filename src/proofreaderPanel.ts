@@ -138,6 +138,25 @@ export class ProofreaderPanel {
     this._panel.onDidDispose(() => this._disposePanel(), undefined, this._disposables);
   }
 
+  /**
+   * Fuzzy-match `targetText` against the document, absorbing whitespace/newline differences.
+   * Special regex characters in the target are escaped, then each run of whitespace is
+   * replaced with `\s+` so minor spacing or line-break differences are tolerated.
+   */
+  private _findFuzzyTextRange(document: vscode.TextDocument, targetText: string): vscode.Range | null {
+    const escaped = targetText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pattern = escaped.replace(/\s+/g, "\\s+");
+    const regex = new RegExp(pattern);
+    const docText = document.getText();
+    const match = regex.exec(docText);
+    if (!match || match.index === undefined) {
+      return null;
+    }
+    const start = document.positionAt(match.index);
+    const end = document.positionAt(match.index + match[0].length);
+    return new vscode.Range(start, end);
+  }
+
   private _focusTextInEditor(targetText: string): void {
     this._log(`[focusText] targetText="${targetText}"`);
 
@@ -156,28 +175,27 @@ export class ProofreaderPanel {
 
     this._log(`[focusText] searching ${candidates.length} document(s)`);
 
-    let found: { doc: vscode.TextDocument; idx: number } | undefined;
+    let found: { doc: vscode.TextDocument; range: vscode.Range } | undefined;
     for (const doc of candidates) {
-      const idx = doc.getText().indexOf(targetText);
-      this._log(`[focusText] checked "${doc.fileName}" → idx=${idx}`);
-      if (idx !== -1) {
-        found = { doc, idx };
+      const range = this._findFuzzyTextRange(doc, targetText);
+      this._log(`[focusText] checked "${doc.fileName}" → found=${range !== null}`);
+      if (range) {
+        found = { doc, range };
         break;
       }
     }
 
     if (!found) {
       this._log("[focusText] targetText not found in any open document");
-      vscode.window.showWarningMessage(`JP Proofreader: 対象テキストが見つかりません: "${targetText}"`);
+      void vscode.window.showInformationMessage(
+        "JP Proofreader: 文字列の特定に失敗しました（改行や空白の差異が原因の可能性があります）",
+      );
       return;
     }
 
-    const { doc, idx } = found;
-    const start = doc.positionAt(idx);
-    const end = doc.positionAt(idx + targetText.length);
-    const range = new vscode.Range(start, end);
+    const { doc, range } = found;
     this._log(
-      `[focusText] found in "${doc.fileName}" at ${start.line}:${start.character}–${end.line}:${end.character}`,
+      `[focusText] found in "${doc.fileName}" at ${range.start.line}:${range.start.character}–${range.end.line}:${range.end.character}`,
     );
 
     void vscode.window.showTextDocument(doc, { preserveFocus: false }).then((editor) => {
