@@ -27,6 +27,8 @@ export class ProofreaderPanel {
   private readonly _disposables: vscode.Disposable[] = [];
   /** Token source for the currently running review — cancelled when a new review starts. */
   private _currentReviewTokenSource: vscode.CancellationTokenSource | undefined;
+  /** Last known active text editor — updated each time the active editor changes. */
+  private _lastActiveEditor: vscode.TextEditor | undefined;
 
   /** Write a log line to the output channel when jp-proofreader.enableLogs is true. */
   private _log(message: string): void {
@@ -67,6 +69,25 @@ export class ProofreaderPanel {
     this._context = context;
     this._diagnosticCollection = diagnosticCollection;
     this._panel.webview.html = this._buildHtml(panel.webview, context);
+
+    // Track the lastactive text editor so focus-item works even after the webview takes focus.
+    // Only track file/untitled editors — output channels and other virtual documents must be ignored.
+    const isTextEditor = (editor: vscode.TextEditor): boolean => {
+      const scheme = editor.document.uri.scheme;
+      return scheme === "file" || scheme === "untitled";
+    };
+    if (vscode.window.activeTextEditor && isTextEditor(vscode.window.activeTextEditor)) {
+      this._lastActiveEditor = vscode.window.activeTextEditor;
+    }
+    vscode.window.onDidChangeActiveTextEditor(
+      (editor) => {
+        if (editor && isTextEditor(editor)) {
+          this._lastActiveEditor = editor;
+        }
+      },
+      undefined,
+      this._disposables,
+    );
 
     this._panel.webview.onDidReceiveMessage(
       (msg: {
@@ -118,20 +139,51 @@ export class ProofreaderPanel {
   }
 
   private _focusTextInEditor(targetText: string): void {
-    const editor = vscode.window.activeTextEditor;
-    if (!editor) {
+    this._log(`[focusText] targetText="${targetText}"`);
+
+    // Search the last active editor first, then fall back to all open documents.
+    const candidates: vscode.TextDocument[] = [];
+    const lastDoc = (vscode.window.activeTextEditor ?? this._lastActiveEditor)?.document;
+    if (lastDoc) {
+      candidates.push(lastDoc);
+    }
+    for (const doc of vscode.workspace.textDocuments) {
+      const scheme = doc.uri.scheme;
+      if ((scheme === "file" || scheme === "untitled") && doc !== lastDoc) {
+        candidates.push(doc);
+      }
+    }
+
+    this._log(`[focusText] searching ${candidates.length} document(s)`);
+
+    let found: { doc: vscode.TextDocument; idx: number } | undefined;
+    for (const doc of candidates) {
+      const idx = doc.getText().indexOf(targetText);
+      this._log(`[focusText] checked "${doc.fileName}" → idx=${idx}`);
+      if (idx !== -1) {
+        found = { doc, idx };
+        break;
+      }
+    }
+
+    if (!found) {
+      this._log("[focusText] targetText not found in any open document");
+      vscode.window.showWarningMessage(`JP Proofreader: 対象テキストが見つかりません: "${targetText}"`);
       return;
     }
-    const docText = editor.document.getText();
-    const idx = docText.indexOf(targetText);
-    if (idx === -1) {
-      return;
-    }
-    const start = editor.document.positionAt(idx);
-    const end = editor.document.positionAt(idx + targetText.length);
+
+    const { doc, idx } = found;
+    const start = doc.positionAt(idx);
+    const end = doc.positionAt(idx + targetText.length);
     const range = new vscode.Range(start, end);
-    editor.selection = new vscode.Selection(range.start, range.end);
-    editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+    this._log(
+      `[focusText] found in "${doc.fileName}" at ${start.line}:${start.character}–${end.line}:${end.character}`,
+    );
+
+    void vscode.window.showTextDocument(doc, { preserveFocus: false }).then((editor) => {
+      editor.selection = new vscode.Selection(range.start, range.end);
+      editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+    });
   }
 
   private _sendSettings(): void {
