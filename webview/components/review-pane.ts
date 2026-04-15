@@ -184,14 +184,6 @@ export class JpReviewPane extends LitElement {
       --sl-spacing-medium: 10px;
     }
 
-    .viewpoint-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 13px;
-      font-weight: 600;
-    }
-
     .level-dot {
       display: inline-block;
       width: 10px;
@@ -209,13 +201,86 @@ export class JpReviewPane extends LitElement {
       background-color: #e03131;
     }
 
-    .viewpoint-content {
+    .group-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .item-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .item-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: var(--sl-border-radius-medium, 4px);
+      background: var(--sl-color-neutral-50, rgba(0, 0, 0, 0.04));
+    }
+
+    .item-row .level-dot {
+      margin-top: 4px;
+      flex-shrink: 0;
+    }
+
+    .item-body {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
       font-size: 13px;
       line-height: 1.7;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .item-content {
       white-space: pre-wrap;
       margin: 0;
     }
+
+    .item-target {
+      font-size: 12px;
+      opacity: 0.65;
+      margin: 0;
+      word-break: break-all;
+    }
+
+    .item-replacement {
+      font-size: 12px;
+      opacity: 0.65;
+      margin: 0;
+      word-break: break-all;
+    }
+
+    .label {
+      font-weight: 600;
+    }
   `;
+
+  private _groupByViewpoint(): Map<string, ReviewItem[]> {
+    const map = new Map<string, ReviewItem[]>();
+    for (const item of this.reviewItems ?? []) {
+      const group = map.get(item.viewpoint);
+      if (group) {
+        group.push(item);
+      } else {
+        map.set(item.viewpoint, [item]);
+      }
+    }
+    return map;
+  }
+
+  private _worstLevel(items: ReviewItem[]): ReviewItem["level"] {
+    if (items.some((i) => i.level === "error")) return "error";
+    if (items.some((i) => i.level === "suggestion")) return "suggestion";
+    return "ok";
+  }
 
   private _loadUrl = (): void => {
     const url = this._urlInput.trim();
@@ -313,14 +378,35 @@ export class JpReviewPane extends LitElement {
           ${showItems
             ? html`
                 <div class="review-items">
-                  ${(this.reviewItems ?? []).map(
-                    (item) => html`
+                  ${Array.from(this._groupByViewpoint().entries()).map(
+                    ([viewpoint, items]) => html`
                       <sl-details>
-                        <div slot="summary" class="viewpoint-header">
-                          <span class="level-dot ${item.level}"></span>
-                          ${item.viewpoint}
+                        <div slot="summary" class="group-header">
+                          <span class="level-dot ${this._worstLevel(items)}"></span>
+                          ${viewpoint}
                         </div>
-                        <p class="viewpoint-content">${item.content}</p>
+                        <div class="item-list">
+                          ${items.map(
+                            (item) => html`
+                              <div class="item-row">
+                                <span class="level-dot ${item.level}"></span>
+                                <div class="item-body">
+                                  <p class="item-content">${item.content}</p>
+                                  ${item.targetText
+                                    ? html`<p class="item-target">
+                                        <span class="label">対象:</span> ${item.targetText}
+                                      </p>`
+                                    : nothing}
+                                  ${item.replacementText
+                                    ? html`<p class="item-replacement">
+                                        <span class="label">修正案:</span> ${item.replacementText}
+                                      </p>`
+                                    : nothing}
+                                </div>
+                              </div>
+                            `,
+                          )}
+                        </div>
                       </sl-details>
                     `,
                   )}
