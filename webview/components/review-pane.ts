@@ -641,9 +641,11 @@ export class JpReviewPane extends LitElement {
                                       name="crosshair"
                                       title="エディタで該当箇所を表示"
                                       @click=${() => {
+                                        const targetText = item.targetText;
+                                        if (!targetText) return;
                                         this.dispatchEvent(
                                           new CustomEvent<FocusItemDetail>("focus-item", {
-                                            detail: { targetText: item.targetText },
+                                            detail: { targetText },
                                             bubbles: true,
                                             composed: true,
                                           }),
