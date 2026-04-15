@@ -103,6 +103,7 @@ export class ProofreaderPanel {
         text?: string;
         modelId?: string;
         items?: ReviewItem[];
+        executedAt?: string;
         systemPrompt?: string;
         url?: string;
         targetText?: string;
@@ -137,8 +138,13 @@ export class ProofreaderPanel {
           void this._loadPromptFromFile();
         } else if (msg.type === "fetchUrl" && typeof msg.url === "string") {
           void this._fetchUrl(msg.url);
-        } else if (msg.type === "saveReviewMarkdown" && Array.isArray(msg.items) && typeof msg.modelId === "string") {
-          void this._saveReviewMarkdown(msg.items, msg.modelId);
+        } else if (
+          msg.type === "saveReviewMarkdown" &&
+          Array.isArray(msg.items) &&
+          typeof msg.modelId === "string" &&
+          typeof msg.executedAt === "string"
+        ) {
+          void this._saveReviewMarkdown(msg.items, msg.modelId, msg.executedAt);
         } else if (msg.type === "focusText") {
           this._log(
             `[focusText] received: line=${JSON.stringify(msg.line)} (type=${typeof msg.line}) targetText=${JSON.stringify(msg.targetText)}`,
@@ -355,12 +361,17 @@ export class ProofreaderPanel {
     }
   }
 
-  private _toDateString(now: Date): string {
+  private _formatDateAsYyyyMmDd(now: Date): string {
     return now.toISOString().slice(0, 10).replace(/-/g, "");
   }
 
   private _escapeMarkdown(value: string): string {
     return value.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\r?\n/g, "<br>");
+  }
+
+  private _sanitizeFileNameSegment(value: string): string {
+    const sanitized = value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").trim();
+    return sanitized || "無題";
   }
 
   private _buildReviewMarkdown(items: ReviewItem[], modelId: string, sourceFileName: string, executedAt: Date): string {
@@ -417,13 +428,22 @@ export class ProofreaderPanel {
     ].join("\n");
   }
 
-  private async _saveReviewMarkdown(items: ReviewItem[], modelId: string): Promise<void> {
+  private async _saveReviewMarkdown(items: ReviewItem[], modelId: string, executedAtText: string): Promise<void> {
     const editor = this._resolveEditor();
     const docUri = editor?.document.uri;
     const parsedPath = docUri?.scheme === "file" ? path.parse(docUri.fsPath) : undefined;
-    const sourceFileName = parsedPath?.base || editor?.document.fileName || "untitled";
-    const dateString = this._toDateString(new Date());
-    const defaultFileName = `${parsedPath?.name || "untitled"}_校閲結果_${dateString}.md`;
+    const untitledLabel = "無題";
+    const sourceFileName =
+      parsedPath?.base || (editor?.document.fileName ? path.basename(editor.document.fileName) : untitledLabel);
+    const executedAt = new Date(executedAtText);
+    const hasValidExecutedAt = !Number.isNaN(executedAt.getTime());
+    const safeExecutedAt = hasValidExecutedAt ? executedAt : new Date();
+    if (!hasValidExecutedAt) {
+      this._log(`[saveReviewMarkdown] invalid executedAt received: "${executedAtText}"`);
+    }
+    const fileBaseName = this._sanitizeFileNameSegment(parsedPath?.name || untitledLabel);
+    const dateString = this._formatDateAsYyyyMmDd(safeExecutedAt);
+    const defaultFileName = `${fileBaseName}_校閲結果_${dateString}.md`;
     const defaultDir =
       parsedPath?.dir || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || this._context.globalStorageUri.fsPath;
     const defaultUri = vscode.Uri.file(path.join(defaultDir, defaultFileName));
@@ -437,7 +457,7 @@ export class ProofreaderPanel {
       return;
     }
     try {
-      const markdown = this._buildReviewMarkdown(items, modelId, sourceFileName, new Date());
+      const markdown = this._buildReviewMarkdown(items, modelId, sourceFileName, safeExecutedAt);
       await vscode.workspace.fs.writeFile(saveUri, new TextEncoder().encode(markdown));
       void vscode.window.showInformationMessage(`校閲結果を保存しました: ${saveUri.fsPath}`);
     } catch (err) {
@@ -685,7 +705,11 @@ export class ProofreaderPanel {
         this._setDiagnostics(items);
         this._outlineProvider?.refresh(items as ReviewItem[]);
       }
-      void this._panel.webview.postMessage({ type: "reviewDone", items: items ?? undefined });
+      void this._panel.webview.postMessage({
+        type: "reviewDone",
+        items: items ?? undefined,
+        executedAt: new Date().toISOString(),
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this._log(`[runReview] error: ${message}`);

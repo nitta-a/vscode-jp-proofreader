@@ -40,6 +40,7 @@ class JpProofreaderApp extends LitElement {
   @state() private _loading = false;
   @state() private _result = "";
   @state() private _reviewItems: ReviewItem[] | null = null;
+  @state() private _reviewExecutedAt = "";
   @state() private _hostError = "";
   @state() private _systemPrompt = "";
   @state() private _defaultSystemPrompt = "";
@@ -121,6 +122,7 @@ class JpProofreaderApp extends LitElement {
       console.log(`[JP Proofreader] reviewDone. resultLength=${this._result.length} hasItems=${!!msg.items}`);
       this._loading = false;
       this._reviewItems = msg.items ?? this._parseReviewItems(this._result);
+      this._reviewExecutedAt = msg.executedAt ?? new Date().toISOString();
     } else if (msg.type === "reviewError") {
       console.error(`[JP Proofreader] reviewError: ${msg.message}`);
       this._loading = false;
@@ -170,12 +172,18 @@ class JpProofreaderApp extends LitElement {
     this._hostError = "";
     this._result = "";
     this._reviewItems = null;
+    this._reviewExecutedAt = "";
     this._loading = true;
     vscode.postMessage({ type: "review", text: e.detail.text, modelId: e.detail.modelId });
   };
 
   private _handleSaveReviewMarkdown = (e: CustomEvent<SaveReviewMarkdownDetail>): void => {
-    vscode.postMessage({ type: "saveReviewMarkdown", items: e.detail.items, modelId: e.detail.modelId });
+    vscode.postMessage({
+      type: "saveReviewMarkdown",
+      items: e.detail.items,
+      modelId: e.detail.modelId,
+      executedAt: e.detail.executedAt,
+    });
   };
 
   private _parseReviewItems(raw: string): ReviewItem[] | null {
@@ -237,6 +245,7 @@ class JpProofreaderApp extends LitElement {
             ?loading=${this._loading}
             .result=${this._result}
             .reviewItems=${this._reviewItems}
+            .reviewExecutedAt=${this._reviewExecutedAt}
             .hostError=${this._hostError}
             .urlText=${this._urlText}
             ?urlLoading=${this._urlLoading}
