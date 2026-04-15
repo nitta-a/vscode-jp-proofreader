@@ -61,15 +61,11 @@ export class ReviewOutlineProvider implements vscode.TreeDataProvider<ReviewTree
     if (!element) {
       // Root level: return one node per unique viewpoint
       const viewpoints = [...new Set(this._items.map((item) => item.viewpoint))];
-      return viewpoints.map(
-        (vp) => new ReviewTreeItem(vp, vscode.TreeItemCollapsibleState.Expanded),
-      );
+      return viewpoints.map((vp) => new ReviewTreeItem(vp, vscode.TreeItemCollapsibleState.Expanded));
     }
 
     // Child level: return items belonging to this viewpoint
     const children = this._items.filter((item) => item.viewpoint === element.label);
-    return children.map(
-      (item) => new ReviewTreeItem(item.content, vscode.TreeItemCollapsibleState.None, item),
-    );
+    return children.map((item) => new ReviewTreeItem(item.content, vscode.TreeItemCollapsibleState.None, item));
   }
 }
