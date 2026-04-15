@@ -12,7 +12,7 @@ import {
   SYSTEM_PROMPT_FILE_KEY,
   SYSTEM_PROMPT_KEY,
 } from "./constants.js";
-import type { ReviewOutlineProvider, ReviewItem } from "./reviewOutlineProvider.js";
+import type { ReviewItem, ReviewOutlineProvider } from "./reviewOutlineProvider.js";
 
 /**
  * Singleton WebviewPanel that hosts the JP Proofreader UI.
@@ -136,11 +136,18 @@ export class ProofreaderPanel {
           void this._loadPromptFromFile();
         } else if (msg.type === "fetchUrl" && typeof msg.url === "string") {
           void this._fetchUrl(msg.url);
-        } else if (msg.type === "focusText" && typeof msg.line === "number") {
-          if (msg.line > 0) {
+        } else if (msg.type === "focusText") {
+          this._log(
+            `[focusText] received: line=${JSON.stringify(msg.line)} (type=${typeof msg.line}) targetText=${JSON.stringify(msg.targetText)}`,
+          );
+          if (typeof msg.line === "number" && msg.line > 0) {
             this._focusLineInEditor(msg.line);
           } else if (typeof msg.targetText === "string" && msg.targetText) {
             this._focusTextInEditor(msg.targetText);
+          } else {
+            this._log(
+              `[focusText] no valid line or targetText — skipping. line=${JSON.stringify(msg.line)} targetText=${JSON.stringify(msg.targetText)}`,
+            );
           }
         }
       },
@@ -163,13 +170,20 @@ export class ProofreaderPanel {
       const s = e.document.uri.scheme;
       return s === "file" || s === "untitled";
     };
-    return (
-      (vscode.window.activeTextEditor && isText(vscode.window.activeTextEditor)
-        ? vscode.window.activeTextEditor
-        : undefined) ??
-      this._lastActiveEditor ??
-      vscode.window.visibleTextEditors.find(isText)
+    const active = vscode.window.activeTextEditor;
+    this._log(
+      `[resolveEditor] activeTextEditor=${active ? `"${active.document.uri.toString()}" (scheme=${active.document.uri.scheme})` : "undefined"}`,
     );
+    this._log(
+      `[resolveEditor] _lastActiveEditor=${this._lastActiveEditor ? `"${this._lastActiveEditor.document.uri.toString()}"` : "undefined"}`,
+    );
+    const visibleText = vscode.window.visibleTextEditors.filter(isText);
+    this._log(
+      `[resolveEditor] visibleTextEditors (file/untitled)=[${visibleText.map((e) => `"${e.document.uri.toString()}"`).join(", ")}]`,
+    );
+    const resolved = (active && isText(active) ? active : undefined) ?? this._lastActiveEditor ?? visibleText[0];
+    this._log(`[resolveEditor] resolved=${resolved ? `"${resolved.document.uri.toString()}"` : "undefined"}`);
+    return resolved;
   }
 
   private _focusTextInEditor(targetText: string): void {
@@ -197,19 +211,26 @@ export class ProofreaderPanel {
     // First: try visible / tracked editors.
     const editor = this._resolveEditor();
     if (editor) {
+      this._log(`[focusText] trying resolved editor: "${editor.document.uri.toString()}"`);
       if (tryDocument(editor.document, editor.viewColumn)) {
         return;
       }
+      this._log(`[focusText] targetText not found in resolved editor — falling through to all documents`);
       // Found an editor but targetText not in it — fall through to search all documents.
+    } else {
+      this._log("[focusText] _resolveEditor returned undefined");
     }
 
     // Second: search every open (possibly non-visible) text document.
-    this._log("[focusText] no matching editor visible; searching all open documents");
+    const allDocs = vscode.workspace.textDocuments;
+    this._log(`[focusText] no matching editor visible; searching all ${allDocs.length} open documents`);
     const isTextDoc = (d: vscode.TextDocument): boolean => d.uri.scheme === "file" || d.uri.scheme === "untitled";
-    for (const doc of vscode.workspace.textDocuments) {
+    for (const doc of allDocs) {
       if (!isTextDoc(doc)) {
+        this._log(`[focusText] skipping non-file document: "${doc.uri.toString()}" (scheme=${doc.uri.scheme})`);
         continue;
       }
+      this._log(`[focusText] searching document: "${doc.uri.toString()}"`);
       if (tryDocument(doc)) {
         return;
       }
@@ -547,7 +568,7 @@ export class ProofreaderPanel {
         chunkCount++;
         totalLength += chunk.length;
         fullReviewText += chunk;
-        this._log(`[runReview] chunk #${chunkCount} length=${chunk.length}`);
+        // this._log(`[runReview] chunk #${chunkCount} length=${chunk.length}`);
         void this._panel.webview.postMessage({ type: "reviewChunk", chunk });
       }
       this._log(`[runReview] done. chunks=${chunkCount} totalLength=${totalLength}`);

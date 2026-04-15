@@ -458,6 +458,87 @@ export class JpReviewPane extends LitElement {
     this._scrollToCurrentMatch();
   }
 
+  /**
+   * テキスト内の連続空白（全角スペース・NBSP含む）を1つの半角スペースに畳み込み、
+   * 各文字の元テキスト内オフセットを記録して返す。
+   */
+  private _normalizeWhitespaceWithMap(text: string): { normalized: string; posMap: number[] } {
+    const posMap: number[] = [];
+    const chars: string[] = [];
+    let lastWasSpace = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (/[\s\u3000\u00a0]/.test(ch)) {
+        if (!lastWasSpace) {
+          posMap.push(i);
+          chars.push(" ");
+          lastWasSpace = true;
+        }
+      } else {
+        posMap.push(i);
+        chars.push(ch);
+        lastWasSpace = false;
+      }
+    }
+    return { normalized: chars.join(""), posMap };
+  }
+
+  /**
+   * テキストエリアに内容がある場合は常に true を返し、エディタへのフォールバックを防ぐ。
+   * targetText が見つかればその位置に選択・スクロール。見つからなくてもテキストエリアにフォーカスする。
+   * テキストエリアが空または要素が見つからない場合のみ false を返す。
+   *
+   * 検索は以下の順で試みる（あいまい一致）:
+   *   1. 完全一致 (indexOf)
+   *   2. 空白正規化後に一致（_htmlToText でプレーンテキスト化済みを前提）
+   */
+  private _focusInTextarea(targetText: string): boolean {
+    console.log("[_focusInTextarea] targetText:", JSON.stringify(targetText));
+    console.log("[_focusInTextarea] _inputText.length:", this._inputText.length);
+
+    if (!this._inputText) {
+      console.log("[_focusInTextarea] _inputText が空 → false を返す");
+      return false;
+    }
+    const slTextarea = this.shadowRoot?.querySelector("sl-textarea") as SlTextarea | null;
+    const textarea = slTextarea?.input;
+    if (!textarea) {
+      console.log("[_focusInTextarea] textarea 要素が見つからない → false を返す");
+      return false;
+    }
+
+    // --- Step 1: 完全一致 ---
+    let offset = this._inputText.indexOf(targetText);
+    console.log("[_focusInTextarea] Step1 完全一致: offset =", offset);
+
+    // --- Step 2: 空白正規化して検索 ---
+    if (offset === -1) {
+      const { normalized: normText, posMap: normMap } = this._normalizeWhitespaceWithMap(this._inputText);
+      const { normalized: normTarget } = this._normalizeWhitespaceWithMap(targetText);
+      console.log("[_focusInTextarea] Step2 正規化後ターゲット:", JSON.stringify(normTarget));
+      const normOffset = normText.indexOf(normTarget);
+      console.log("[_focusInTextarea] Step2 正規化一致: normOffset =", normOffset);
+      if (normOffset !== -1) {
+        offset = normMap[normOffset] ?? -1;
+        console.log("[_focusInTextarea] Step2 元テキストへのマップ: offset =", offset);
+      }
+    }
+
+    if (offset !== -1) {
+      console.log("[_focusInTextarea] 発見: offset =", offset, "→ スクロール・選択");
+      textarea.focus({ preventScroll: true });
+      textarea.setSelectionRange(offset, offset + targetText.length);
+      const linesBefore = this._inputText.slice(0, offset).split("\n").length - 1;
+      const defaultLineHeight = 20;
+      const lineHeight = Number.parseFloat(window.getComputedStyle(textarea).lineHeight) || defaultLineHeight;
+      textarea.scrollTop = Math.max(0, linesBefore * lineHeight - textarea.clientHeight / 3);
+    } else {
+      console.log("[_focusInTextarea] 見つからず → テキストエリアにフォーカスのみ");
+      textarea.focus();
+    }
+    return true;
+  }
+
   private _loadUrl = (): void => {
     const url = this._urlInput.trim();
     if (!url) return;
@@ -650,8 +731,12 @@ export class JpReviewPane extends LitElement {
                                     ? html`<sl-icon-button
                                       class="item-focus-btn"
                                       name="crosshair"
-                                      title="エディタで該当箇所を表示"
+                                      title="該当箇所を表示"
                                       @click=${() => {
+                                        // テキストエリアにテキストがあればそこへスクロール、なければエディタへ
+                                        if (item.targetText && this._focusInTextarea(item.targetText)) {
+                                          return;
+                                        }
                                         this.dispatchEvent(
                                           new CustomEvent<FocusItemDetail>("focus-item", {
                                             detail: { line: item.line, targetText: item.targetText },
