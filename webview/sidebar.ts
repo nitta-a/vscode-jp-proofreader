@@ -7,14 +7,17 @@ import "@shoelace-style/shoelace/dist/themes/dark.css";
 import "@shoelace-style/shoelace/dist/themes/light.css";
 // Shoelace components used in this view
 import "@shoelace-style/shoelace/dist/components/button/button.js";
+import "@shoelace-style/shoelace/dist/components/select/select.js";
+import "@shoelace-style/shoelace/dist/components/option/option.js";
 import "@shoelace-style/shoelace/dist/components/textarea/textarea.js";
+import type SlSelect from "@shoelace-style/shoelace/dist/components/select/select.js";
 import type SlTextarea from "@shoelace-style/shoelace/dist/components/textarea/textarea.js";
 import { setBasePath } from "@shoelace-style/shoelace/dist/utilities/base-path.js";
 // Lit
 import { css, html, LitElement } from "lit";
 import { customElement, state } from "lit/decorators.js";
 // Shared types
-import type { SidebarHostMsg, SidebarVsCodeApi } from "./vscode-api";
+import type { PromptPreset, SidebarHostMsg, SidebarVsCodeApi } from "./vscode-api";
 
 // Read Shoelace asset base path from the meta tag injected by the extension host.
 setBasePath(document.querySelector<HTMLMetaElement>('meta[name="sl-base"]')?.content ?? "");
@@ -26,6 +29,8 @@ const sidebarVscode = acquireVsCodeApi();
 @customElement("jp-sidebar-app")
 class JpSidebarApp extends LitElement {
   @state() private _customRules = "";
+  @state() private _presets: PromptPreset[] = [];
+  @state() private _activePresetId = "";
   @state() private _ready = false;
 
   static override styles = css`
@@ -66,6 +71,11 @@ class JpSidebarApp extends LitElement {
       flex: 1;
     }
 
+    sl-select {
+      width: 100%;
+      flex-shrink: 0;
+    }
+
     .hint {
       font-size: 11px;
       opacity: 0.6;
@@ -89,12 +99,19 @@ class JpSidebarApp extends LitElement {
     const msg = ev.data;
     if (msg.type === "sidebarData") {
       this._customRules = msg.customRules;
+      this._presets = msg.presets ?? [];
+      this._activePresetId = msg.activePresetId ?? "";
       this._ready = true;
     }
   };
 
   private _handleStartCheck = (): void => {
     sidebarVscode.postMessage({ type: "executeCommand", command: "jp-proofreader.check" });
+  };
+
+  private _handlePresetChange = (e: Event): void => {
+    const value = (e.target as SlSelect).value as string;
+    sidebarVscode.postMessage({ type: "applyPreset", presetId: value });
   };
 
   private _handleChange = (e: Event): void => {
@@ -110,6 +127,13 @@ class JpSidebarApp extends LitElement {
     return html`
       <div class="container">
         <sl-button class="start-button" variant="primary" @click=${this._handleStartCheck}>校閲を開始する</sl-button>
+        <sl-select
+          label="校閲プロンプト"
+          .value=${this._activePresetId}
+          @sl-change=${this._handlePresetChange}
+        >
+          ${this._presets.map((p) => html`<sl-option value=${p.id}>${p.label}</sl-option>`)}
+        </sl-select>
         <sl-textarea
           label="プロジェクト固有ルール / 用語集"
           help-text="校閲時に最優先で適用されます"

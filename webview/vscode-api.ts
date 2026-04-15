@@ -47,12 +47,20 @@ type WebviewToHostMsg =
   | { type: "fetchUrl"; url: string }
   | { type: "focusText"; line: number; targetText?: string };
 
+export type PromptPreset = { id: string; label: string };
+
 export type SidebarToHostMsg =
   | { type: "getSidebarData" }
   | { type: "updateCustomRules"; rules: string }
-  | { type: "executeCommand"; command: string };
+  | { type: "executeCommand"; command: string }
+  | { type: "applyPreset"; presetId: string };
 
-export type SidebarHostMsg = { type: "sidebarData"; customRules: string };
+export type SidebarHostMsg = {
+  type: "sidebarData";
+  customRules: string;
+  presets: PromptPreset[];
+  activePresetId: string;
+};
 
 // ---------------------------------------------------------------------------
 // Singleton
