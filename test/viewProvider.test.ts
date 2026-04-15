@@ -1,7 +1,5 @@
-import * as assert from "node:assert";
-
 import * as vscode from "vscode";
-
+import * as assert from "node:assert";
 import { ProofreaderViewProvider } from "../src/viewProvider.js";
 
 function buildMockContext(): vscode.ExtensionContext {
@@ -15,6 +13,16 @@ function buildMockContext(): vscode.ExtensionContext {
     },
     subscriptions: [],
   } as unknown as vscode.ExtensionContext;
+}
+
+function buildMockDiagnosticCollection(): vscode.DiagnosticCollection {
+  return {
+    name: "jp-proofreader",
+    set: () => {},
+    delete: () => {},
+    clear: () => {},
+    dispose: () => {},
+  } as unknown as vscode.DiagnosticCollection;
 }
 
 function buildMockWebviewView(): {
@@ -44,7 +52,7 @@ suite("ProofreaderViewProvider", () => {
   let provider: ProofreaderViewProvider;
 
   suiteSetup(() => {
-    provider = new ProofreaderViewProvider(buildMockContext());
+    provider = new ProofreaderViewProvider(buildMockContext(), buildMockDiagnosticCollection());
   });
 
   test("resolveWebviewView should set webview HTML", () => {

@@ -157,8 +157,11 @@ export class ProofreaderPanel {
     }
     const range = editor.document.lineAt(lineIndex).range;
     this._log(`[focusText] focusing line ${line} in "${editor.document.fileName}"`);
-    editor.selection = new vscode.Selection(range.start, range.end);
-    editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+    void vscode.window.showTextDocument(editor.document, {
+      selection: range,
+      preserveFocus: false,
+      viewColumn: editor.viewColumn,
+    });
   }
 
   private _sendSettings(): void {
@@ -596,7 +599,7 @@ export class ProofreaderPanel {
     if (!this._diagnosticCollection) {
       return;
     }
-    const editor = vscode.window.activeTextEditor;
+    const editor = vscode.window.activeTextEditor ?? this._lastActiveEditor;
     if (!editor) {
       return;
     }
@@ -613,6 +616,7 @@ export class ProofreaderPanel {
       }
       const start = document.positionAt(index);
       const end = document.positionAt(index + item.targetText.length);
+      item.line = start.line + 1;
       const range = new vscode.Range(start, end);
       let severity: vscode.DiagnosticSeverity;
       if (item.level === "error") {
