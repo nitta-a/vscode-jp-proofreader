@@ -135,6 +135,10 @@ export class JpReviewPane extends LitElement {
       font-size: var(--vscode-editor-font-size, 13px);
       line-height: 1.65;
     }
+    sl-textarea::part(textarea)::selection {
+      background-color: var(--vscode-editor-findMatchHighlightBackground, #ffd33d99);
+      color: var(--vscode-editor-foreground, inherit);
+    }
 
     .result-box {
       flex: 1;
@@ -419,7 +423,9 @@ export class JpReviewPane extends LitElement {
     if (!textarea) {
       return;
     }
-    // Set the selection (will be visible when the textarea gains focus).
+    // Focus the textarea so the selection highlight is visible.
+    textarea.focus({ preventScroll: true });
+    // Set the selection (highlighted via ::selection CSS).
     textarea.setSelectionRange(match.start, match.end);
     // Scroll the textarea so the match is visible.
     const linesBefore = this._inputText.slice(0, match.start).split("\n").length - 1;
