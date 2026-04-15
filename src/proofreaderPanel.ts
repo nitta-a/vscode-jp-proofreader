@@ -76,6 +76,8 @@ export class ProofreaderPanel {
         systemPrompt?: string;
         url?: string;
         targetText?: string;
+        customRules?: string;
+        url?: string;
       }) => {
         this._log(`[webview→host] type="${msg.type}"`);
         if (msg.type === "requestModels") {
@@ -92,6 +94,13 @@ export class ProofreaderPanel {
         } else if (msg.type === "setSettings" && typeof msg.systemPrompt === "string") {
           void this._context.globalState.update(SYSTEM_PROMPT_KEY, msg.systemPrompt);
           this._sendSettings();
+        } else if (msg.type === "updateSettings" && typeof msg.customRules === "string") {
+          const target = vscode.workspace.workspaceFolders?.length
+            ? vscode.ConfigurationTarget.Workspace
+            : vscode.ConfigurationTarget.Global;
+          void vscode.workspace
+            .getConfiguration("vscode-jp-proofreader")
+            .update("customRules", msg.customRules, target);
         } else if (msg.type === "savePromptToFile" && typeof msg.systemPrompt === "string") {
           void this._savePromptToFile(msg.systemPrompt);
         } else if (msg.type === "loadPromptFromFile") {
@@ -155,6 +164,7 @@ export class ProofreaderPanel {
       systemPrompt,
       defaultSystemPrompt: DEFAULT_SYSTEM_PROMPT,
       promptFilePath,
+      customRules: vscode.workspace.getConfiguration("vscode-jp-proofreader").get<string>("customRules", ""),
     });
   }
 
@@ -376,15 +386,19 @@ export class ProofreaderPanel {
       }
       this._log(`[runReview] model found: "${model.id}" (${model.family}). sending request…`);
 
-      // Load custom rules from the workspace root (.proofreaderrc.txt or proofreader-dict.txt).
-      let customRules = "";
+      // Load custom rules: prefer the value stored in VS Code settings, fall back to
+      // workspace root files (.proofreaderrc.txt or proofreader-dict.txt).
+      const configCustomRules = vscode.workspace
+        .getConfiguration("vscode-jp-proofreader")
+        .get<string>("customRules", "");
+      let fileCustomRules = "";
       const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
       if (workspaceFolder) {
         for (const fileName of [".proofreaderrc.txt", "proofreader-dict.txt"]) {
           const fileUri = vscode.Uri.joinPath(workspaceFolder.uri, fileName);
           try {
             const bytes = await vscode.workspace.fs.readFile(fileUri);
-            customRules = new TextDecoder().decode(bytes);
+            fileCustomRules = new TextDecoder().decode(bytes);
             this._log(`[runReview] loaded custom rules from ${fileName}`);
             break;
           } catch {
@@ -392,6 +406,7 @@ export class ProofreaderPanel {
           }
         }
       }
+      const customRules = configCustomRules || fileCustomRules;
 
       // Get the language ID of the document currently open in the active editor.
       // Only accept safe identifier characters to prevent prompt injection.
