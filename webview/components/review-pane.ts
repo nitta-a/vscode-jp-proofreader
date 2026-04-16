@@ -24,6 +24,7 @@ import type { ModelInfo, ReviewItem } from "../vscode-api";
 export type ReviewRequestDetail = { text: string; modelId: string };
 export type FetchUrlDetail = { url: string };
 export type FocusItemDetail = { line: number; targetText: string };
+export type SaveReviewMarkdownDetail = { items: ReviewItem[]; modelId: string; executedAt: string };
 
 @customElement("jp-review-pane")
 export class JpReviewPane extends LitElement {
@@ -37,6 +38,8 @@ export class JpReviewPane extends LitElement {
   @property({ attribute: false }) reviewItems: ReviewItem[] | null = null;
   /** Error message originating from the host (e.g. API failure). */
   @property() hostError = "";
+  /** ISO datetime when the latest review finished. */
+  @property() reviewExecutedAt = "";
   /** Text fetched from URL by the host — applied to textarea when set. */
   @property() urlText = "";
   /** Whether URL fetch is in progress. */
@@ -570,6 +573,19 @@ export class JpReviewPane extends LitElement {
     );
   };
 
+  private _saveReviewMarkdown = (): void => {
+    if (!this.reviewItems || this.reviewItems.length === 0 || !this._modelId || !this.reviewExecutedAt) {
+      return;
+    }
+    this.dispatchEvent(
+      new CustomEvent<SaveReviewMarkdownDetail>("save-review-markdown", {
+        detail: { items: this.reviewItems, modelId: this._modelId, executedAt: this.reviewExecutedAt },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  };
+
   override render() {
     const showPlaceholder = !this.result && !this.loading && this.reviewItems === null;
     const showLoading = this.loading && !this.result;
@@ -689,6 +705,14 @@ export class JpReviewPane extends LitElement {
           >
             <sl-icon slot="prefix" name="stars"></sl-icon>
             Copilotレビュー
+          </sl-button>
+
+          <sl-button
+            variant="default"
+            ?disabled=${this.loading || (this.reviewItems?.length ?? 0) === 0 || !this.reviewExecutedAt}
+            @click=${this._saveReviewMarkdown}
+          >
+            結果を保存 (.md)
           </sl-button>
 
           ${displayError ? html`<p class="error-msg">${displayError}</p>` : nothing}

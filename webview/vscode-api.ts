@@ -21,7 +21,7 @@ export type ReviewItem = {
 export type HostMsg =
   | { type: "models"; models: ModelInfo[] }
   | { type: "reviewChunk"; chunk: string }
-  | { type: "reviewDone"; items?: ReviewItem[] }
+  | { type: "reviewDone"; items?: ReviewItem[]; executedAt?: string }
   | { type: "reviewError"; message: string }
   | {
       type: "settings";
@@ -39,6 +39,7 @@ export type HostMsg =
 type WebviewToHostMsg =
   | { type: "requestModels" }
   | { type: "review"; text: string; modelId: string }
+  | { type: "saveReviewMarkdown"; items: ReviewItem[]; modelId: string; executedAt: string }
   | { type: "getSettings" }
   | { type: "setSettings"; systemPrompt: string }
   | { type: "updateSettings"; customRules: string }
