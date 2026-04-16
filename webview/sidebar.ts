@@ -45,7 +45,7 @@ class JpSidebarApp extends LitElement {
       --sl-input-color: var(--vscode-input-foreground, #cccccc);
       --sl-input-border-color: var(--vscode-input-border, #555555);
       --sl-input-focus-ring-color: var(--vscode-focusBorder, #007fd4);
-      --sl-panel-background-color: var(--vscode-sideBar-background, #1e1e1e);
+      --sl-panel-background-color: var(--vscode-dropdown-background, #3c3c3c);
     }
 
     .container {
