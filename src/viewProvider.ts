@@ -1,5 +1,6 @@
 import * as crypto from "node:crypto";
 import * as vscode from "vscode";
+import { PROMPT_PRESETS, SELECTED_PRESET_KEY, SYSTEM_PROMPT_KEY } from "./constants.js";
 
 /**
  * WebviewViewProvider for the JP Proofreader sidebar.
@@ -23,10 +24,12 @@ export class SidebarViewProvider implements vscode.WebviewViewProvider {
     webviewView.webview.html = this._buildHtml(webviewView.webview);
 
     webviewView.webview.onDidReceiveMessage(
-      (msg: { type: string; rules?: string; command?: string }) => {
+      (msg: { type: string; rules?: string; command?: string; presetId?: string }) => {
         if (msg.type === "getSidebarData") {
           const customRules = vscode.workspace.getConfiguration("vscode-jp-proofreader").get<string>("customRules", "");
-          void webviewView.webview.postMessage({ type: "sidebarData", customRules });
+          const presets = PROMPT_PRESETS.map(({ id, label }) => ({ id, label }));
+          const activePresetId = this._context.globalState.get<string>(SELECTED_PRESET_KEY, "default");
+          void webviewView.webview.postMessage({ type: "sidebarData", customRules, presets, activePresetId });
         } else if (msg.type === "updateCustomRules" && typeof msg.rules === "string") {
           const target = vscode.workspace.workspaceFolders?.length
             ? vscode.ConfigurationTarget.Workspace
@@ -34,6 +37,22 @@ export class SidebarViewProvider implements vscode.WebviewViewProvider {
           void vscode.workspace.getConfiguration("vscode-jp-proofreader").update("customRules", msg.rules, target);
         } else if (msg.type === "executeCommand" && typeof msg.command === "string") {
           void vscode.commands.executeCommand(msg.command);
+        } else if (msg.type === "applyPreset" && typeof msg.presetId === "string") {
+          const preset = PROMPT_PRESETS.find((p) => p.id === msg.presetId);
+          if (preset) {
+            void this._context.globalState.update(SYSTEM_PROMPT_KEY, preset.prompt);
+            void this._context.globalState.update(SELECTED_PRESET_KEY, preset.id);
+            const customRules = vscode.workspace
+              .getConfiguration("vscode-jp-proofreader")
+              .get<string>("customRules", "");
+            const presets = PROMPT_PRESETS.map(({ id, label }) => ({ id, label }));
+            void webviewView.webview.postMessage({
+              type: "sidebarData",
+              customRules,
+              presets,
+              activePresetId: preset.id,
+            });
+          }
         }
       },
       undefined,
@@ -46,7 +65,9 @@ export class SidebarViewProvider implements vscode.WebviewViewProvider {
       (e) => {
         if (e.affectsConfiguration("vscode-jp-proofreader.customRules") && this._view?.visible) {
           const customRules = vscode.workspace.getConfiguration("vscode-jp-proofreader").get<string>("customRules", "");
-          void this._view.webview.postMessage({ type: "sidebarData", customRules });
+          const presets = PROMPT_PRESETS.map(({ id, label }) => ({ id, label }));
+          const activePresetId = this._context.globalState.get<string>(SELECTED_PRESET_KEY, "default");
+          void this._view.webview.postMessage({ type: "sidebarData", customRules, presets, activePresetId });
         }
       },
       undefined,
